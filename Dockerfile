@@ -39,7 +39,7 @@ RUN chmod +x /usr/local/bin/healthserver
 
 # Copy configuration files
 COPY torrc /etc/tor/torrc
-COPY entrypoint.sh /entrypoint.sh
+COPY scripts/entrypoint.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 
 # Set default environment variables

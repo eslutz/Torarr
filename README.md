@@ -208,7 +208,7 @@ scrape_configs:
 
 ### Grafana Dashboard
 
-Import `grafana/torarr-dashboard.json` into Grafana and select your Prometheus datasource. Panels include readiness, bootstrap progress, traffic, request rates, and external check results.
+Import `docs/torarr-dashboard.json` into Grafana and select your Prometheus datasource. Panels include readiness, bootstrap progress, traffic, request rates, and external check results.
 
 ## Environment Variables
 
