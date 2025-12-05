@@ -31,8 +31,33 @@ env:
 # Jobs
 # ------------------------------------------------------------------------------
 jobs:
-  build-and-test:
+  # ----------------------------------------------------------------------------
+  # Lint - Code quality checks
+  # ----------------------------------------------------------------------------
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+
+  # ----------------------------------------------------------------------------
+  # Build - Docker image build and push
+  # ----------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint]
     permissions:
       contents: read
       packages: write
@@ -49,7 +74,7 @@ jobs:
       # Logic:
       # - PRs get 'pr-{number}'
       # - Main branch gets 'edge'
-      - name: Determine Version
+      - name: Determine version
         id: version
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
