@@ -5,12 +5,10 @@ on:
     branches:
       - main
     tags:
-      - 'v*'
+      - "v*"
   pull_request:
     branches:
       - main
-  schedule:
-    - cron: '0 0 * * 0'  # Weekly security rebuild
   workflow_dispatch:
 
 env:
