@@ -16,11 +16,12 @@ A lightweight, health-monitored Tor proxy container designed as a sidecar for th
 - **Fast Restarts**: Persistent volume for Tor consensus cache
 - **Multi-Architecture**: Supports `linux/amd64` and `linux/arm64`
 - **Zero External Dependencies**: Pure Go stdlib for HTTP routing
+- **Metrics Ready**: Prometheus `/metrics` endpoint with Grafana dashboard template
 - **Production Ready**: Graceful shutdown, signal handling, and comprehensive logging
 
 ## Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────┐
 │                    Torarr Container                     │
 ├─────────────────────────────────────────────────────────┤
@@ -28,10 +29,10 @@ A lightweight, health-monitored Tor proxy container designed as a sidecar for th
 │  ┌──────────────┐         ┌──────────────────────────┐  │
 │  │     Tor      │◄───────►│   Health Server (Go)     │  │
 │  │              │  9051   │                          │  │
-│  │  SOCKS:9050  │ Control │  HTTP:8080               │  │
+│  │  SOCKS:9050  │ Control │  HTTP:8085               │  │
 │  │              │  Port   │  ├─ GET /ping            │  │
 │  └──────────────┘         │  ├─ GET /health          │  │
-│         │                 │  ├─ GET /health/full     │  │
+│         │                 │  ├─ GET /health/external │  │
 │         │                 │  └─ GET /status          │  │
 │         ▼                 └──────────────────────────┘  │
 │  ┌──────────────┐                                       │
@@ -58,12 +59,12 @@ services:
       - TZ=America/New_York
     ports:
       - "127.0.0.1:9050:9050"  # SOCKS5 proxy
-      - "127.0.0.1:8080:8080"  # Health endpoint (optional)
+      - "127.0.0.1:8085:8085"  # Health endpoint (optional)
     volumes:
       - tor-data:/var/lib/tor
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8085/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -79,7 +80,7 @@ volumes:
 docker run -d \
   --name tor-proxy \
   -p 127.0.0.1:9050:9050 \
-  -p 127.0.0.1:8080:8080 \
+  -p 127.0.0.1:8085:8085 \
   -e TZ=America/New_York \
   -v tor-data:/var/lib/tor \
   --restart unless-stopped \
@@ -96,24 +97,28 @@ Torarr provides multiple health check endpoints with different verification leve
 | `GET /health` | Readiness check | <50ms | None | Container orchestrator readiness probe |
 | `GET /health/external` | External connection test | 1-15s | Tor network | Manual verification of external connectivity |
 | `GET /status` | Full Tor status | <50ms | None | Monitoring/debugging |
+| `GET /metrics` | Prometheus metrics | <10ms | None | Prometheus/Grafana scraping |
 
 ### Endpoint Details
 
 #### `/ping` - Liveness Check
+
 Returns immediately with `{"status":"OK"}`. Use for container liveness probes.
 
 ```bash
-curl http://localhost:8080/ping
+curl http://localhost:8085/ping
 ```
 
 #### `/health` - Readiness Check
+
 Checks Tor control port and bootstrap status. Returns ready when bootstrap ≥100%.
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8085/health
 ```
 
 **Response (Ready):**
+
 ```json
 {
   "status": "READY"
@@ -121,6 +126,7 @@ curl http://localhost:8080/health
 ```
 
 **Response (Not Ready):**
+
 ```json
 {
   "status": "NOT_READY",
@@ -129,15 +135,17 @@ curl http://localhost:8080/health
 ```
 
 #### `/health/external` - External Connection Test
+
 Tests external connectivity through the Tor proxy using multiple endpoints with retry/fallback logic. This endpoint bypasses Tor readiness checks and directly verifies external connection.
 
 **⚠️ Important**: Use this endpoint for one-off verification (e.g., manual testing). Do **not** use as a constant healthcheck, as it makes requests to external services on each call.
 
 ```bash
-curl http://localhost:8080/health/external
+curl http://localhost:8085/health/external
 ```
 
 **Response (Connected via Tor):**
+
 ```json
 {
   "success": true,
@@ -149,6 +157,7 @@ curl http://localhost:8080/health/external
 ```
 
 **Response (Not Connected via Tor):**
+
 ```json
 {
   "success": false,
@@ -159,13 +168,15 @@ curl http://localhost:8080/health/external
 ```
 
 #### `/status` - Full Status
+
 Returns detailed Tor status including version, bootstrap phase, circuits, and traffic.
 
 ```bash
-curl http://localhost:8080/status
+curl http://localhost:8085/status
 ```
 
 **Response:**
+
 ```json
 {
   "status": "OK",
@@ -180,6 +191,27 @@ curl http://localhost:8080/status
 }
 ```
 
+#### `/metrics` - Prometheus Metrics
+
+Exposes Prometheus-format metrics for HTTP requests, Tor readiness/traffic, and external check outcomes.
+
+```bash
+curl http://localhost:8085/metrics
+```
+
+Prometheus scrape example:
+
+```yaml
+scrape_configs:
+  - job_name: torarr
+    static_configs:
+      - targets: ['tor-proxy:8085']
+```
+
+### Grafana Dashboard
+
+Import `grafana/torarr-dashboard.json` into Grafana and select your Prometheus datasource. Panels include readiness, bootstrap progress, traffic, request rates, and external check results.
+
 ## Environment Variables
 
 | Variable | Default | Description |
@@ -187,13 +219,13 @@ curl http://localhost:8080/status
 | `TZ` | `UTC` | Timezone for logs |
 | `TOR_CONTROL_PASSWORD` | (auto-generated) | Password for Tor control port |
 | `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address |
-| `HEALTH_PORT` | `8080` | Health server port |
-| `HEALTH_FULL_TIMEOUT` | `15` | Timeout for `/health/full` in seconds |
-| `HEALTH_FULL_CACHE_TTL` | `30` | Cache TTL for external checks in seconds |
+| `HEALTH_PORT` | `8085` | Health server port |
+| `HEALTH_FULL_TIMEOUT` | `15` | Timeout for `/health/external` in seconds |
 | `HEALTH_EXTERNAL_ENDPOINTS` | (see below) | Comma-separated external check URLs |
 | `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
 
 **Default External Endpoints:**
+
 - `https://check.torproject.org/api/ip`
 - `https://check.dan.me.uk/`
 - `https://ipinfo.io/json`
@@ -217,7 +249,7 @@ services:
       - tor-data:/var/lib/tor
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8080/health"]
+      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8085/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -256,6 +288,7 @@ volumes:
 ## Persistent Volume
 
 **Important**: Mount `/var/lib/tor` as a persistent volume for:
+
 - Faster restarts (cached Tor consensus)
 - Reduced Tor network load
 - Consistent guard relay selection
@@ -267,7 +300,7 @@ Without persistence, Tor must download fresh consensus on each restart (~30-60s 
 ### Check Tor Bootstrap Status
 
 ```bash
-curl http://localhost:8080/status
+curl http://localhost:8085/status
 ```
 
 Look for `bootstrap_phase: 100` and `circuit_established: true`.
@@ -288,17 +321,20 @@ Expected response: `{"IsTor":true,"IP":"..."}`
 
 ### Container Won't Start
 
-1. Check if ports 9050/8080 are available:
+1. Check if ports 9050/8085 are available:
+
    ```bash
-   netstat -tuln | grep -E '9050|8080'
+   netstat -tuln | grep -E '9050|8085'
    ```
 
 2. Verify volume permissions:
+
    ```bash
    docker volume inspect tor-data
    ```
 
 3. Check for conflicting Tor instances:
+
    ```bash
    pgrep -a tor
    ```
@@ -310,6 +346,7 @@ If `bootstrap_phase` is stuck below 100:
 1. Check internet connectivity
 2. Verify no firewall blocking Tor (ports 443, 9001, 9030)
 3. Try deleting volume and restarting:
+
    ```bash
    docker-compose down
    docker volume rm tor-data
@@ -354,12 +391,12 @@ Contributions welcome! Please:
 
 ## Security
 
-- Tor control password is auto-generated on startup
-- Health server binds to all interfaces for container orchestration
-- SOCKS proxy should be bound to localhost in production (already default in docker-compose)
-- No sensitive data logged
+- **Tor Control Password**: A random password is automatically generated on container startup and hashed for `torrc`. This ensures every instance is unique and secure.
+- **Health Server**: Binds to all interfaces (0.0.0.0) to allow container orchestration health checks.
+- **SOCKS Proxy**: Should be bound to localhost or a private network in production (default in docker-compose).
+- **Logging**: No sensitive data (like passwords) is logged.
 
-**Reporting Security Issues**: Please email security@example.com (do not open public issues)
+**Reporting Security Issues**: Please email <security@example.com> (do not open public issues)
 
 ## License
 
@@ -373,7 +410,7 @@ MIT License - see [LICENSE](LICENSE) for details
 
 ## Roadmap
 
-- [ ] Prometheus metrics endpoint
+- [x] Prometheus metrics endpoint
 - [ ] Configurable circuit refresh intervals
 - [ ] Bridge support for censored networks
 - [ ] Bandwidth statistics dashboard

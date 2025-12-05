@@ -1,0 +1,33 @@
+version: 2
+updates:
+  # Monitor Dockerfile base images
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "00:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ""
+    pull-request-branch-name:
+      separator: "/"
+    labels:
+      - "dependencies"
+      - "docker"
+
+  # Monitor Go dependencies
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "00:00"
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: ""
+    pull-request-branch-name:
+      separator: "/"
+    labels:
+      - "dependencies"
+      - "go"

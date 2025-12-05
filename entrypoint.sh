@@ -5,7 +5,8 @@ echo "Starting Torarr..."
 
 # Generate Tor control password if not set
 if [ -z "$TOR_CONTROL_PASSWORD" ]; then
-    export TOR_CONTROL_PASSWORD="torarr$(date +%s | sha256sum | base64 | head -c 16)"
+    TOR_CONTROL_PASSWORD="torarr$(date +%s | sha256sum | base64 | head -c 16)"
+    export TOR_CONTROL_PASSWORD
     echo "Generated Tor control password: $TOR_CONTROL_PASSWORD"
 fi
 
@@ -21,7 +22,7 @@ echo "Starting health server..."
 HEALTH_PID=$!
 
 # Trap signals for graceful shutdown
-trap "echo 'Shutting down...'; kill -TERM $HEALTH_PID 2>/dev/null || true; exit 0" SIGTERM SIGINT
+trap 'echo "Shutting down..."; kill -TERM $HEALTH_PID 2>/dev/null || true; exit 0' TERM INT
 
 # Start Tor as main process
 echo "Starting Tor..."

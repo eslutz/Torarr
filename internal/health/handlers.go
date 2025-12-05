@@ -8,17 +8,20 @@ import (
 
 	"github.com/eslutz/torarr/internal/config"
 	"github.com/eslutz/torarr/internal/tor"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 type Handler struct {
 	torClient       *tor.Client
 	externalChecker *ExternalChecker
 	config          *config.Config
+	metrics         *metrics
 }
 
 func NewHandler(cfg *config.Config) *Handler {
 	torClient := tor.NewClient(cfg.TorControlAddress, cfg.TorControlPassword)
-	
+	metrics := newMetrics()
+
 	externalChecker := NewExternalChecker(
 		cfg.HealthExternalEndpoints,
 		time.Duration(cfg.HealthFullTimeout)*time.Second,
@@ -29,6 +32,7 @@ func NewHandler(cfg *config.Config) *Handler {
 		torClient:       torClient,
 		externalChecker: externalChecker,
 		config:          cfg,
+		metrics:         metrics,
 	}
 }
 
@@ -43,13 +47,33 @@ func (h *Handler) Ping(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	if !h.torClient.IsReady() {
+	status, err := h.torClient.GetStatus()
+	if err != nil {
+		if h.metrics != nil {
+			h.metrics.torReady.Set(0)
+		}
 		w.WriteHeader(http.StatusServiceUnavailable)
 		json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "NOT_READY",
 			"error":  "tor not ready",
 		})
 		return
+	}
+
+	if status.BootstrapPhase < 100 {
+		if h.metrics != nil {
+			h.metrics.observeTorStatus(status)
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"status": "NOT_READY",
+			"error":  "tor not ready",
+		})
+		return
+	}
+
+	if h.metrics != nil {
+		h.metrics.observeTorStatus(status)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -62,6 +86,10 @@ func (h *Handler) External(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
 	result := h.externalChecker.Check()
+
+	if h.metrics != nil {
+		h.metrics.observeExternalCheck(result.Endpoint, result.Success, result.IsTor)
+	}
 
 	if !result.Success || !result.IsTor {
 		w.WriteHeader(http.StatusServiceUnavailable)
@@ -98,6 +126,10 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 			"bytes_written": status.Traffic.BytesWritten,
 		},
 	})
+
+	if h.metrics != nil {
+		h.metrics.observeTorStatus(status)
+	}
 }
 
 func (h *Handler) Close() error {
@@ -105,16 +137,34 @@ func (h *Handler) Close() error {
 }
 
 func (h *Handler) SetupRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/ping", h.Ping)
-	mux.HandleFunc("/health", h.Health)
-	mux.HandleFunc("/health/external", h.External)
-	mux.HandleFunc("/status", h.Status)
+	mux.HandleFunc("/ping", h.instrument("/ping", h.Ping))
+	mux.HandleFunc("/health", h.instrument("/health", h.Health))
+	mux.HandleFunc("/health/external", h.instrument("/health/external", h.External))
+	mux.HandleFunc("/status", h.instrument("/status", h.Status))
+	mux.Handle("/metrics", promhttp.Handler())
 }
 
-func (h *Handler) LogRequest(next http.HandlerFunc) http.HandlerFunc {
+func (h *Handler) instrument(path string, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 		start := time.Now()
-		next(w, r)
-		log.Printf("%s %s %s", r.Method, r.URL.Path, time.Since(start))
+		next(recorder, r)
+		duration := time.Since(start)
+
+		log.Printf("%s %s %d %s", r.Method, r.URL.Path, recorder.status, duration)
+
+		if h.metrics != nil {
+			h.metrics.observeRequest(path, r.Method, recorder.status, duration)
+		}
 	}
+}
+
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(statusCode int) {
+	r.status = statusCode
+	r.ResponseWriter.WriteHeader(statusCode)
 }

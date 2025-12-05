@@ -1,58 +1,80 @@
 package config
 
 import (
+	"log"
 	"os"
 	"strconv"
 	"strings"
 )
 
 type Config struct {
-	TZ                        string
-	TorControlPassword        string
-	TorControlAddress         string
-	HealthPort                string
-	HealthFullTimeout         int
-	HealthFullCacheTTL        int
-	HealthExternalEndpoints   []string
-	LogLevel                  string
+	TorControlAddress       string
+	TorControlPassword      string
+	HealthPort              string
+	HealthFullTimeout       int
+	HealthExternalEndpoints []string
+	LogLevel                string
 }
 
 func Load() *Config {
-	return &Config{
-		TZ:                 getEnv("TZ", "UTC"),
-		TorControlPassword: getEnv("TOR_CONTROL_PASSWORD", ""),
-		TorControlAddress:  getEnv("TOR_CONTROL_ADDRESS", "127.0.0.1:9051"),
-		HealthPort:         getEnv("HEALTH_PORT", "8080"),
-		HealthFullTimeout:  getEnvInt("HEALTH_FULL_TIMEOUT", 15),
-		HealthFullCacheTTL: getEnvInt("HEALTH_FULL_CACHE_TTL", 30),
-		HealthExternalEndpoints: getEnvSlice("HEALTH_EXTERNAL_ENDPOINTS", []string{
-			"https://check.torproject.org/api/ip",
-			"https://check.dan.me.uk/",
-			"https://ipinfo.io/json",
-		}),
-		LogLevel: getEnv("LOG_LEVEL", "INFO"),
+	cfg := &Config{
+		TorControlAddress:       getEnv("TOR_CONTROL_ADDRESS", "127.0.0.1:9051"),
+		TorControlPassword:      os.Getenv("TOR_CONTROL_PASSWORD"),
+		HealthPort:              getEnv("HEALTH_PORT", "8085"),
+		HealthFullTimeout:       getEnvAsInt("HEALTH_FULL_TIMEOUT", 15),
+		HealthExternalEndpoints: parseEndpoints(getEnv("HEALTH_EXTERNAL_ENDPOINTS", "")),
+		LogLevel:                strings.ToUpper(getEnv("LOG_LEVEL", "INFO")),
 	}
+
+	if len(cfg.HealthExternalEndpoints) == 0 {
+		cfg.HealthExternalEndpoints = defaultExternalEndpoints()
+	}
+
+	return cfg
 }
 
 func getEnv(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return defaultValue
 	}
-	return defaultValue
+	return value
 }
 
-func getEnvInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intVal, err := strconv.Atoi(value); err == nil {
-			return intVal
+func getEnvAsInt(key string, defaultValue int) int {
+	valueStr := strings.TrimSpace(os.Getenv(key))
+	if valueStr == "" {
+		return defaultValue
+	}
+
+	value, err := strconv.Atoi(valueStr)
+	if err != nil {
+		log.Printf("Invalid value for %s: %s (using default %d)", key, valueStr, defaultValue)
+		return defaultValue
+	}
+	return value
+}
+
+func parseEndpoints(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+
+	parts := strings.Split(raw, ",")
+	var endpoints []string
+	for _, part := range parts {
+		endpoint := strings.TrimSpace(part)
+		if endpoint != "" {
+			endpoints = append(endpoints, endpoint)
 		}
 	}
-	return defaultValue
+	return endpoints
 }
 
-func getEnvSlice(key string, defaultValue []string) []string {
-	if value := os.Getenv(key); value != "" {
-		return strings.Split(value, ",")
+func defaultExternalEndpoints() []string {
+	return []string{
+		"https://check.torproject.org/api/ip",
+		"https://check.dan.me.uk/",
+		"https://ipinfo.io/json",
 	}
-	return defaultValue
 }
