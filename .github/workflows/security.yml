@@ -63,13 +63,17 @@ jobs:
       - name: Checkout Source
         uses: actions/checkout@v4
 
+      - name: Set image name
+        id: image
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
       - name: Build Docker Image
-        run: docker build -t ${{ github.repository }}:scan .
+        run: docker build -t ${{ steps.image.outputs.name }}:scan .
 
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: "${{ github.repository }}:scan"
+          image-ref: "${{ steps.image.outputs.name }}:scan"
           format: "sarif"
           output: "trivy-results.sarif"
           ignore-unfixed: true
