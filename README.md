@@ -1,11 +1,9 @@
 # Torarr - Custom Tor Proxy Container
 
-<p align="center">
-  <img src="https://img.shields.io/github/workflow/status/eslutz/torarr/Build%20and%20Push%20Docker%20Image" alt="Build Status">
-  <img src="https://img.shields.io/github/v/release/eslutz/torarr" alt="Latest Release">
-  <img src="https://img.shields.io/docker/image-size/eslutz/torarr/latest" alt="Image Size">
-  <img src="https://img.shields.io/github/license/eslutz/torarr" alt="License">
-</p>
+![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/eslutz/Torarr/build.yml)
+![GitHub Release](https://img.shields.io/github/v/release/eslutz/Torarr)
+![Docker Image Size](https://img.shields.io/docker/image-size/eslutz/Torarr/latest)
+![GitHub License](https://img.shields.io/github/license/eslutz/Torarr)
 
 A lightweight, health-monitored Tor proxy container designed as a sidecar for the *arr stack (Sonarr, Radarr, Prowlarr, etc.). Built with Go for minimal footprint (~25MB) and fast startup times.
 
@@ -388,6 +386,16 @@ Contributions welcome! Please:
 3. Make your changes
 4. Add tests if applicable
 5. Submit a pull request
+
+### Automated Releases & Versioning
+
+Releases are fully automated based on commit messages using Semantic Versioning:
+
+- **fix:** triggers a Patch release (v1.0.0 -> v1.0.1)
+- **feat:** triggers a Minor release (v1.0.0 -> v1.1.0)
+- **BREAKING CHANGE:** triggers a Major release (v1.0.0 -> v2.0.0)
+
+On every push to `main`, the system builds the Docker image, tags it, and creates a GitHub Release with a changelog.
 
 ## Security
 

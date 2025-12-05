@@ -29,7 +29,7 @@ RUN apk add --no-cache \
   tzdata
 
 # Create tor user and directories
-RUN adduser -D -H -u 1000 tor && \
+RUN (id -u tor || adduser -D -H -u 1000 tor) && \
   mkdir -p /var/lib/tor /etc/tor && \
   chown -R tor:tor /var/lib/tor /etc/tor
 
