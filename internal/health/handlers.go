@@ -12,27 +12,27 @@ import (
 )
 
 type Handler struct {
-	torClient       *tor.Client
-	externalChecker *ExternalChecker
-	config          *config.Config
-	metrics         *metrics
+	torClient        *tor.Client
+	readinessChecker *ExternalChecker
+	config           *config.Config
+	metrics          *metrics
 }
 
 func NewHandler(cfg *config.Config) *Handler {
 	torClient := tor.NewClient(cfg.TorControlAddress, cfg.TorControlPassword)
 	metrics := newMetrics()
 
-	externalChecker := NewExternalChecker(
+	readinessChecker := NewExternalChecker(
 		cfg.HealthExternalEndpoints,
 		time.Duration(cfg.HealthExternalTimeout)*time.Second,
 		"socks5://127.0.0.1:9050",
 	)
 
 	return &Handler{
-		torClient:       torClient,
-		externalChecker: externalChecker,
-		config:          cfg,
-		metrics:         metrics,
+		torClient:        torClient,
+		readinessChecker: readinessChecker,
+		config:           cfg,
+		metrics:          metrics,
 	}
 }
 
@@ -82,10 +82,11 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *Handler) External(w http.ResponseWriter, r *http.Request) {
+// Ready checks whether Tor egress is functioning by hitting external endpoints through the SOCKS proxy.
+func (h *Handler) Ready(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 
-	result := h.externalChecker.Check()
+	result := h.readinessChecker.Check()
 
 	if h.metrics != nil {
 		h.metrics.observeExternalCheck(result.Endpoint, result.Success, result.IsTor)
@@ -155,7 +156,7 @@ func (h *Handler) Close() error {
 func (h *Handler) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/ping", h.instrument("/ping", h.Ping))
 	mux.HandleFunc("/health", h.instrument("/health", h.Health))
-	mux.HandleFunc("/health/external", h.instrument("/health/external", h.External))
+	mux.HandleFunc("/ready", h.instrument("/ready", h.Ready))
 	mux.HandleFunc("/status", h.instrument("/status", h.Status))
 	mux.HandleFunc("/renew", h.instrument("/renew", h.Renew))
 	mux.Handle("/metrics", promhttp.Handler())

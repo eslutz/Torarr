@@ -31,7 +31,7 @@ A lightweight, health-monitored Tor proxy container designed as a sidecar for th
 │  │  SOCKS:9050  │ Control │  HTTP:8085               │  │
 │  │              │  Port   │  ├─ GET /ping            │  │
 │  └──────────────┘         │  ├─ GET /health          │  │
-│         │                 │  ├─ GET /health/external │  │
+│         │                 │  ├─ GET /ready           │  │
 │         │                 │  └─ GET /status          │  │
 │         ▼                 └──────────────────────────┘  │
 │  ┌──────────────┐                                       │
@@ -70,7 +70,7 @@ Torarr provides multiple health check endpoints with different verification leve
 |----------|---------|-------|---------------|----------|
 | `GET /ping` | Liveness check | <1ms | None | Container orchestrator liveness probe |
 | `GET /health` | Readiness check | <50ms | None | Container orchestrator readiness probe |
-| `GET /health/external` | External connection test | 1-15s | Tor network | Manual verification of external connectivity |
+| `GET /ready` | Tor egress readiness | 1-15s | Tor network | Ensure traffic can exit via Tor before routing requests |
 | `GET /status` | Full Tor status | <50ms | None | Monitoring/debugging |
 | `GET /metrics` | Prometheus metrics | <10ms | None | Prometheus/Grafana scraping |
 
@@ -109,17 +109,17 @@ curl http://localhost:8085/health
 }
 ```
 
-#### `/health/external` - External Connection Test
+#### `/ready` - Tor Egress Readiness
 
-Tests external connectivity through the Tor proxy using multiple endpoints with retry/fallback logic. This endpoint bypasses Tor readiness checks and directly verifies external connection.
+Verifies external connectivity through the Tor SOCKS proxy using configured endpoints (defaults target Tor check services). Useful as a readiness probe to ensure Tor egress works before routing Prowlarr traffic.
 
-**⚠️ Important**: Use this endpoint for one-off verification (e.g., manual testing). Do **not** use as a constant healthcheck, as it makes requests to external services on each call.
+**⚠️ Important**: Use cautiously; it makes outbound requests on each call. Suitable for readiness checks with sensible intervals/backoff.
 
 ```bash
-curl http://localhost:8085/health/external
+curl http://localhost:8085/ready
 ```
 
-**Response (Connected via Tor):**
+**Response (Tor egress working):**
 
 ```json
 {
@@ -335,7 +335,7 @@ If `bootstrap_phase` is stuck below 100:
 
 ### External Verification Fails
 
-If `/health/external` shows `is_tor: false`:
+If `/ready` shows `is_tor: false`:
 
 1. Check if SOCKS proxy is working (see above)
 2. Verify external endpoints are accessible
