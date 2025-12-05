@@ -1,7 +1,7 @@
 package config
 
 import (
-	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -11,7 +11,7 @@ type Config struct {
 	TorControlAddress       string
 	TorControlPassword      string
 	HealthPort              string
-	HealthFullTimeout       int
+	HealthExternalTimeout   int
 	HealthExternalEndpoints []string
 	LogLevel                string
 }
@@ -21,7 +21,7 @@ func Load() *Config {
 		TorControlAddress:       getEnv("TOR_CONTROL_ADDRESS", "127.0.0.1:9051"),
 		TorControlPassword:      os.Getenv("TOR_CONTROL_PASSWORD"),
 		HealthPort:              getEnv("HEALTH_PORT", "8085"),
-		HealthFullTimeout:       getEnvAsInt("HEALTH_FULL_TIMEOUT", 15),
+		HealthExternalTimeout:   getEnvAsInt("HEALTH_EXTERNAL_TIMEOUT", 15),
 		HealthExternalEndpoints: parseEndpoints(getEnv("HEALTH_EXTERNAL_ENDPOINTS", "")),
 		LogLevel:                strings.ToUpper(getEnv("LOG_LEVEL", "INFO")),
 	}
@@ -49,7 +49,12 @@ func getEnvAsInt(key string, defaultValue int) int {
 
 	value, err := strconv.Atoi(valueStr)
 	if err != nil {
-		log.Printf("Invalid value for %s: %s (using default %d)", key, valueStr, defaultValue)
+		slog.Warn("Invalid configuration value",
+			"key", key,
+			"value", valueStr,
+			"default", defaultValue,
+			"error", err,
+		)
 		return defaultValue
 	}
 	return value
@@ -74,7 +79,5 @@ func parseEndpoints(raw string) []string {
 func defaultExternalEndpoints() []string {
 	return []string{
 		"https://check.torproject.org/api/ip",
-		"https://check.dan.me.uk/",
-		"https://ipinfo.io/json",
 	}
 }

@@ -2,7 +2,7 @@ package health
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -24,7 +24,7 @@ func NewHandler(cfg *config.Config) *Handler {
 
 	externalChecker := NewExternalChecker(
 		cfg.HealthExternalEndpoints,
-		time.Duration(cfg.HealthFullTimeout)*time.Second,
+		time.Duration(cfg.HealthExternalTimeout)*time.Second,
 		"socks5://127.0.0.1:9050",
 	)
 
@@ -132,6 +132,22 @@ func (h *Handler) Status(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+
+	if err := h.torClient.Signal("NEWNYM"); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"})
+}
+
 func (h *Handler) Close() error {
 	return h.torClient.Close()
 }
@@ -141,6 +157,7 @@ func (h *Handler) SetupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/health", h.instrument("/health", h.Health))
 	mux.HandleFunc("/health/external", h.instrument("/health/external", h.External))
 	mux.HandleFunc("/status", h.instrument("/status", h.Status))
+	mux.HandleFunc("/renew", h.instrument("/renew", h.Renew))
 	mux.Handle("/metrics", promhttp.Handler())
 }
 
@@ -151,7 +168,12 @@ func (h *Handler) instrument(path string, next http.HandlerFunc) http.HandlerFun
 		next(recorder, r)
 		duration := time.Since(start)
 
-		log.Printf("%s %s %d %s", r.Method, r.URL.Path, recorder.status, duration)
+		slog.Info("request handled",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", recorder.status,
+			"duration", duration,
+		)
 
 		if h.metrics != nil {
 			h.metrics.observeRequest(path, r.Method, recorder.status, duration)

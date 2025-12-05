@@ -212,15 +212,20 @@ Import `docs/torarr-dashboard.json` into Grafana and select your Prometheus data
 
 ## Environment Variables
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `TZ` | `UTC` | Timezone for logs |
-| `TOR_CONTROL_PASSWORD` | (auto-generated) | Password for Tor control port |
-| `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address |
-| `HEALTH_PORT` | `8085` | Health server port |
-| `HEALTH_FULL_TIMEOUT` | `15` | Timeout for `/health/external` in seconds |
-| `HEALTH_EXTERNAL_ENDPOINTS` | (see below) | Comma-separated external check URLs |
-| `LOG_LEVEL` | `INFO` | Log level (DEBUG, INFO, WARN, ERROR) |
+Torarr is configured using environment variables. You can set these directly in your `docker-compose.yml` or use a `.env` file.
+
+### Using a .env file
+
+1. Copy the example file:
+
+   ```bash
+   cp docs/.env.example .env
+   ```
+
+2. Edit `.env` with your desired configuration.
+3. Docker Compose will automatically pick up these values.
+
+See [.env.example](docs/.env.example) for a complete list of available variables and their descriptions.
 
 **Default External Endpoints:**
 

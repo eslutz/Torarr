@@ -16,6 +16,13 @@ if [ -n "$TOR_CONTROL_PASSWORD" ]; then
     sed -i "s|^HashedControlPassword.*|HashedControlPassword $HASHED_PASSWORD|" /etc/tor/torrc
 fi
 
+# Configure Exit Nodes if specified
+if [ -n "$TOR_EXIT_NODES" ]; then
+    echo "ExitNodes $TOR_EXIT_NODES" >> /etc/tor/torrc
+    echo "StrictNodes 1" >> /etc/tor/torrc
+    echo "Configured ExitNodes: $TOR_EXIT_NODES"
+fi
+
 # Start health server in background
 echo "Starting health server..."
 /usr/local/bin/healthserver &

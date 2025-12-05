@@ -45,7 +45,7 @@ RUN chmod +x /entrypoint.sh
 # Set default environment variables
 ENV TZ=UTC \
   HEALTH_PORT=8085 \
-  HEALTH_FULL_TIMEOUT=15 \
+  HEALTH_EXTERNAL_TIMEOUT=15 \
   LOG_LEVEL=INFO
 
 # Expose ports
