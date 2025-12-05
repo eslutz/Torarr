@@ -37,7 +37,7 @@ Torarr is a lightweight Tor proxy container with comprehensive health monitoring
 
 ## Container Design
 
-- Multi-stage build (build in golang:1.23-alpine, run in alpine:3.20)
+- Multi-stage build (build in golang:1.25-alpine, run in alpine:3.23)
 - Single entrypoint script manages both processes
 - Graceful shutdown with signal handling
 - Persistent volume for `/var/lib/tor` (consensus cache)
