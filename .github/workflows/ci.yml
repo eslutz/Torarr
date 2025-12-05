@@ -1,0 +1,104 @@
+# ==============================================================================
+# Continuous Integration Pipeline
+# Runs on Pull Requests and pushes to the main branch.
+# Builds Docker images for testing (pr-*) and bleeding edge (edge).
+# ==============================================================================
+
+name: CI
+
+# ------------------------------------------------------------------------------
+# Triggers
+# ------------------------------------------------------------------------------
+on:
+  pull_request:
+    branches:
+      - main
+    # Ignore documentation changes
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - ".github/**"
+  workflow_dispatch:
+
+# ------------------------------------------------------------------------------
+# Environment Variables
+# ------------------------------------------------------------------------------
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# ------------------------------------------------------------------------------
+# Jobs
+# ------------------------------------------------------------------------------
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Used for build-time metadata
+      - name: Get current date
+        id: date
+        run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
+
+      # Logic:
+      # - PRs get 'pr-{number}'
+      # - Main branch gets 'edge'
+      - name: Determine Version
+        id: version
+        run: |
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "version=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=edge" >> $GITHUB_OUTPUT
+          fi
+
+      # Required for multi-arch builds (amd64/arm64)
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # Required for building multi-platform images
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # Authenticate with GHCR to push images
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Generates tags:
+      # - pr-{number} for Pull Requests
+      # - edge for pushes to main
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=pr
+            type=raw,value=edge,enable=${{ github.ref_name == 'main' }}
+
+      # Builds the image for multiple platforms and pushes to GHCR
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Inject version info into the Go binary via build args
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            DATE=${{ steps.date.outputs.date }}

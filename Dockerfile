@@ -12,10 +12,16 @@ RUN go mod download || true
 # Copy source code
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
+COPY pkg/ ./pkg/
+
+# Build-time variables with defaults for local builds (overridden by CI/CD)
+ARG VERSION=dev
+ARG COMMIT=none
+ARG DATE=unknown
 
 # Build static binary
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
-  -ldflags="-w -s" \
+  -ldflags="-w -s -X github.com/eslutz/torarr/pkg/version.Version=${VERSION} -X github.com/eslutz/torarr/pkg/version.Commit=${COMMIT} -X github.com/eslutz/torarr/pkg/version.Date=${DATE}" \
   -o healthserver \
   ./cmd/healthserver
 

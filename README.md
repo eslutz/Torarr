@@ -1,9 +1,10 @@
 # Torarr - Custom Tor Proxy Container
 
-![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/eslutz/Torarr/build.yml)
-![GitHub Release](https://img.shields.io/github/v/release/eslutz/Torarr)
-![Docker Image Size](https://img.shields.io/docker/image-size/eslutz/Torarr/latest)
-![GitHub License](https://img.shields.io/github/license/eslutz/Torarr)
+[![Workflow Status](https://github.com/eslutz/torarr/actions/workflows/release.yml/badge.svg)](https://github.com/eslutz/torarr/actions/workflows/release.yml)
+[![Security Check](https://github.com/eslutz/torarr/actions/workflows/security.yml/badge.svg)](https://github.com/eslutz/torarr/actions/workflows/security.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/eslutz/torarr)](https://goreportcard.com/report/github.com/eslutz/torarr)
+[![License](https://img.shields.io/github/license/eslutz/torarr)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/eslutz/torarr?color=007ec6)](https://github.com/eslutz/torarr/releases)
 
 A lightweight, health-monitored Tor proxy container designed as a sidecar for the *arr stack (Sonarr, Radarr, Prowlarr, etc.). Built with Go for minimal footprint (~25MB) and fast startup times.
 
@@ -19,7 +20,7 @@ A lightweight, health-monitored Tor proxy container designed as a sidecar for th
 
 ## Architecture
 
-```text
+```txt
 ┌─────────────────────────────────────────────────────────┐
 │                    Torarr Container                     │
 ├─────────────────────────────────────────────────────────┤
@@ -44,35 +45,11 @@ A lightweight, health-monitored Tor proxy container designed as a sidecar for th
 
 ## Quick Start
 
-### Using Docker Compose (Recommended)
+### Docker Compose
 
-```yaml
-version: '3.8'
+See [docs/docker-compose.example.yml](docs/docker-compose.example.yml) for a complete example.
 
-services:
-  tor-proxy:
-    image: ghcr.io/eslutz/torarr:latest
-    container_name: tor-proxy
-    environment:
-      - TZ=America/New_York
-    ports:
-      - "127.0.0.1:9050:9050"  # SOCKS5 proxy
-      - "127.0.0.1:8085:8085"  # Health endpoint (optional)
-    volumes:
-      - tor-data:/var/lib/tor
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8085/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-volumes:
-  tor-data:
-```
-
-### Using Docker CLI
+### Docker CLI
 
 ```bash
 docker run -d \

@@ -1,0 +1,82 @@
+# ==============================================================================
+# Security Pipeline
+# Runs on pushes to main, pull requests, and weekly schedule.
+# Combines GitHub-native CodeQL with Trivy for container scanning.
+# ==============================================================================
+
+name: Security
+
+# ------------------------------------------------------------------------------
+# Triggers
+# ------------------------------------------------------------------------------
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+  schedule:
+    - cron: "30 1 * * 0" # Weekly on Sunday at 01:30
+
+# ------------------------------------------------------------------------------
+# Permissions
+# ------------------------------------------------------------------------------
+permissions:
+  contents: read
+  security-events: write # Required for CodeQL to upload results
+
+# ------------------------------------------------------------------------------
+# Jobs
+# ------------------------------------------------------------------------------
+jobs:
+  # ----------------------------------------------------------------------------
+  # CodeQL - GitHub-native static analysis for Go
+  # ----------------------------------------------------------------------------
+  codeql:
+    name: CodeQL Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: go
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:go"
+
+  # ----------------------------------------------------------------------------
+  # Trivy - Container image vulnerability scanning
+  # Covers base image (Alpine) and installed OS packages (tor, ca-certificates)
+  # ----------------------------------------------------------------------------
+  trivy-image:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Source
+        uses: actions/checkout@v4
+
+      - name: Build Docker Image
+        run: docker build -t torarr:security-scan .
+
+      - name: Run Trivy vulnerability scanner on image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: "torarr:security-scan"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container"
