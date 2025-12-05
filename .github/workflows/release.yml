@@ -98,10 +98,26 @@ jobs:
 
       # Create a GitHub Release
       - name: Create Release
-        uses: softprops/action-gh-release@v2
-        with:
-          generate_release_notes: true
-          # Mark as "latest" only if it's a stable release (no hyphen)
-          make_latest: ${{ !contains(github.ref, '-') }}
-          # Mark as "pre-release" if the tag contains a hyphen (e.g. v1.0.0-rc1)
-          prerelease: ${{ contains(github.ref, '-') }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          IS_PRERELEASE: ${{ contains(github.ref, '-') }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          # Build flags based on whether this is a prerelease tag
+          flags=(--generate-notes)
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            flags+=(--prerelease --latest=false)
+          else
+            flags+=(--latest)
+          fi
+
+          # Skip if the release already exists (helps reruns on the same tag)
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; skipping creation."
+            exit 0
+          fi
+
+          gh release create "$TAG" "${flags[@]}"
