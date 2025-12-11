@@ -18,11 +18,11 @@ type Client struct {
 }
 
 type Status struct {
-	Version         string
-	BootstrapPhase  int
+	Version            string
+	BootstrapPhase     int
 	CircuitEstablished bool
-	NumCircuits     int
-	Traffic         TrafficStats
+	NumCircuits        int
+	Traffic            TrafficStats
 }
 
 type TrafficStats struct {
@@ -245,4 +245,3 @@ func (c *Client) Signal(sig string) error {
 
 	return nil
 }
-

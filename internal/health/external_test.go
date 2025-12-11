@@ -33,32 +33,32 @@ func TestParseResponse_TorProject(t *testing.T) {
 	checker := NewExternalChecker(nil, 0, "")
 
 	tests := []struct {
-		name         string
-		endpoint     string
-		body         []byte
-		expectedTor  bool
-		expectedIP   string
+		name        string
+		endpoint    string
+		body        []byte
+		expectedTor bool
+		expectedIP  string
 	}{
 		{
-			name:         "TorProject - is Tor",
-			endpoint:     "https://check.torproject.org/api/ip",
-			body:         []byte(`{"IsTor":true,"IP":"185.220.101.1"}`),
-			expectedTor:  true,
-			expectedIP:   "185.220.101.1",
+			name:        "TorProject - is Tor",
+			endpoint:    "https://check.torproject.org/api/ip",
+			body:        []byte(`{"IsTor":true,"IP":"185.220.101.1"}`),
+			expectedTor: true,
+			expectedIP:  "185.220.101.1",
 		},
 		{
-			name:         "TorProject - not Tor",
-			endpoint:     "https://check.torproject.org/api/ip",
-			body:         []byte(`{"IsTor":false,"IP":"1.2.3.4"}`),
-			expectedTor:  false,
-			expectedIP:   "1.2.3.4",
+			name:        "TorProject - not Tor",
+			endpoint:    "https://check.torproject.org/api/ip",
+			body:        []byte(`{"IsTor":false,"IP":"1.2.3.4"}`),
+			expectedTor: false,
+			expectedIP:  "1.2.3.4",
 		},
 		{
-			name:         "TorProject - invalid JSON",
-			endpoint:     "https://check.torproject.org/api/ip",
-			body:         []byte(`invalid json`),
-			expectedTor:  false,
-			expectedIP:   "",
+			name:        "TorProject - invalid JSON",
+			endpoint:    "https://check.torproject.org/api/ip",
+			body:        []byte(`invalid json`),
+			expectedTor: false,
+			expectedIP:  "",
 		},
 	}
 
@@ -81,28 +81,28 @@ func TestParseResponse_DanMeUk(t *testing.T) {
 	checker := NewExternalChecker(nil, 0, "")
 
 	tests := []struct {
-		name         string
-		endpoint     string
-		body         []byte
-		expectedTor  bool
+		name        string
+		endpoint    string
+		body        []byte
+		expectedTor bool
 	}{
 		{
-			name:         "Dan.me.uk - Yes",
-			endpoint:     "https://check.dan.me.uk",
-			body:         []byte("Yes"),
-			expectedTor:  true,
+			name:        "Dan.me.uk - Yes",
+			endpoint:    "https://check.dan.me.uk",
+			body:        []byte("Yes"),
+			expectedTor: true,
 		},
 		{
-			name:         "Dan.me.uk - yes (lowercase)",
-			endpoint:     "https://check.dan.me.uk",
-			body:         []byte("yes"),
-			expectedTor:  true,
+			name:        "Dan.me.uk - yes (lowercase)",
+			endpoint:    "https://check.dan.me.uk",
+			body:        []byte("yes"),
+			expectedTor: true,
 		},
 		{
-			name:         "Dan.me.uk - No",
-			endpoint:     "https://check.dan.me.uk",
-			body:         []byte("No"),
-			expectedTor:  false,
+			name:        "Dan.me.uk - No",
+			endpoint:    "https://check.dan.me.uk",
+			body:        []byte("No"),
+			expectedTor: false,
 		},
 	}
 
@@ -121,39 +121,39 @@ func TestParseResponse_IPInfo(t *testing.T) {
 	checker := NewExternalChecker(nil, 0, "")
 
 	tests := []struct {
-		name         string
-		endpoint     string
-		body         []byte
-		expectedTor  bool
-		expectedIP   string
+		name        string
+		endpoint    string
+		body        []byte
+		expectedTor bool
+		expectedIP  string
 	}{
 		{
-			name:         "IPInfo - Tor org",
-			endpoint:     "https://ipinfo.io/json",
-			body:         []byte(`{"ip":"185.220.101.1","org":"AS12345 TOR Network"}`),
-			expectedTor:  true,
-			expectedIP:   "185.220.101.1",
+			name:        "IPInfo - Tor org",
+			endpoint:    "https://ipinfo.io/json",
+			body:        []byte(`{"ip":"185.220.101.1","org":"AS12345 TOR Network"}`),
+			expectedTor: true,
+			expectedIP:  "185.220.101.1",
 		},
 		{
-			name:         "IPInfo - Regular org",
-			endpoint:     "https://ipinfo.io/json",
-			body:         []byte(`{"ip":"1.2.3.4","org":"AS54321 Regular ISP"}`),
-			expectedTor:  false,
-			expectedIP:   "1.2.3.4",
+			name:        "IPInfo - Regular org",
+			endpoint:    "https://ipinfo.io/json",
+			body:        []byte(`{"ip":"1.2.3.4","org":"AS54321 Regular ISP"}`),
+			expectedTor: false,
+			expectedIP:  "1.2.3.4",
 		},
 		{
-			name:         "IPInfo - Tor lowercase",
-			endpoint:     "https://ipinfo.io/json",
-			body:         []byte(`{"ip":"185.220.101.1","org":"tor exit node"}`),
-			expectedTor:  true,
-			expectedIP:   "185.220.101.1",
+			name:        "IPInfo - Tor lowercase",
+			endpoint:    "https://ipinfo.io/json",
+			body:        []byte(`{"ip":"185.220.101.1","org":"tor exit node"}`),
+			expectedTor: true,
+			expectedIP:  "185.220.101.1",
 		},
 		{
-			name:         "IPInfo - Invalid JSON",
-			endpoint:     "https://ipinfo.io/json",
-			body:         []byte(`invalid`),
-			expectedTor:  false,
-			expectedIP:   "",
+			name:        "IPInfo - Invalid JSON",
+			endpoint:    "https://ipinfo.io/json",
+			body:        []byte(`invalid`),
+			expectedTor: false,
+			expectedIP:  "",
 		},
 	}
 

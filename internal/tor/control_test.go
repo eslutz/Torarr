@@ -8,19 +8,19 @@ import (
 
 func TestNewClient(t *testing.T) {
 	client := NewClient("127.0.0.1:9051", "password")
-	
+
 	if client == nil {
 		t.Fatal("expected client to be created, got nil")
 	}
-	
+
 	if client.address != "127.0.0.1:9051" {
 		t.Errorf("expected address to be '127.0.0.1:9051', got '%s'", client.address)
 	}
-	
+
 	if client.password != "password" {
 		t.Errorf("expected password to be 'password', got '%s'", client.password)
 	}
-	
+
 	if client.conn != nil {
 		t.Error("expected connection to be nil initially")
 	}
@@ -28,11 +28,11 @@ func TestNewClient(t *testing.T) {
 
 func TestNewClient_NoPassword(t *testing.T) {
 	client := NewClient("localhost:9051", "")
-	
+
 	if client == nil {
 		t.Fatal("expected client to be created, got nil")
 	}
-	
+
 	if client.password != "" {
 		t.Errorf("expected password to be empty, got '%s'", client.password)
 	}
@@ -67,8 +67,8 @@ func TestParseBootstrapPhase(t *testing.T) {
 			expected: 0,
 		},
 		{
-			name: "No bootstrap phase",
-			input: map[string]string{},
+			name:     "No bootstrap phase",
+			input:    map[string]string{},
 			expected: 0,
 		},
 	}
@@ -118,8 +118,8 @@ func TestParseCircuitEstablished(t *testing.T) {
 			expected: false,
 		},
 		{
-			name: "No circuit status",
-			input: map[string]string{},
+			name:     "No circuit status",
+			input:    map[string]string{},
 			expected: false,
 		},
 	}
@@ -175,7 +175,7 @@ func TestParseTrafficStats(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			status := &Status{}
-			
+
 			// Simulate parsing logic using standard library
 			if read, ok := tt.input["traffic/read"]; ok {
 				if val, err := strconv.ParseInt(read, 10, 64); err == nil {

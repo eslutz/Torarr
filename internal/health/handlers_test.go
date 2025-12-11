@@ -81,21 +81,21 @@ func TestSetupRoutes(t *testing.T) {
 	// Test that we can set up routes without errors
 	// We don't call SetupRoutes because it would require a fully initialized handler
 	// Instead, test that individual handlers can be called
-	
+
 	handler := &Handler{}
-	
+
 	// Test Ping route (doesn't need Tor client)
 	mux.HandleFunc("/ping", handler.Ping)
-	
+
 	req := httptest.NewRequest(http.MethodGet, "/ping", nil)
 	w := httptest.NewRecorder()
-	
+
 	mux.ServeHTTP(w, req)
-	
+
 	if w.Code == http.StatusNotFound {
 		t.Error("ping route not found")
 	}
-	
+
 	if w.Code != http.StatusOK {
 		t.Errorf("expected ping to return %d, got %d", http.StatusOK, w.Code)
 	}
@@ -149,11 +149,11 @@ func TestInstrument_RecordsStatusCode(t *testing.T) {
 func TestNewHandler(t *testing.T) {
 	// Note: This is a basic test that doesn't require Tor to be running
 	// We're just testing the constructor
-	
+
 	// We can't easily test this without mocking config, but we can verify
 	// the structure is created properly in isolation
 	handler := &Handler{}
-	
+
 	if handler == nil {
 		t.Fatal("expected handler to be created")
 	}
