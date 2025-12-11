@@ -154,16 +154,3 @@ func TestInstrument_RecordsStatusCode(t *testing.T) {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
 	}
 }
-
-// TestNewHandler verifies the handler is created with correct configuration
-func TestNewHandler(t *testing.T) {
-	// Note: This is a basic test that doesn't require Tor to be running
-	// We're just testing the constructor
-
-	// We can't easily test this without mocking config, but we can verify
-	// the structure is created properly in isolation
-	handler := &Handler{}
-
-	// Basic validation that the handler exists
-	_ = handler
-}

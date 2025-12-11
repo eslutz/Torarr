@@ -54,10 +54,11 @@ func (c *Client) Connect() error {
 
 	if c.password != "" {
 		if err := c.authenticate(); err != nil {
-			if closeErr := c.conn.Close(); closeErr != nil {
+			closeErr := c.conn.Close()
+			c.conn = nil
+			if closeErr != nil {
 				return fmt.Errorf("authentication failed: %w (close error: %v)", err, closeErr)
 			}
-			c.conn = nil
 			return err
 		}
 	}
@@ -106,10 +107,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 
 	cmd := fmt.Sprintf("GETINFO %s\r\n", strings.Join(keys, " "))
 	if _, err := c.conn.Write([]byte(cmd)); err != nil {
-		if closeErr := c.conn.Close(); closeErr != nil {
+		closeErr := c.conn.Close()
+		c.conn = nil
+		if closeErr != nil {
 			return nil, fmt.Errorf("failed to send getinfo command: %w (close error: %v)", err, closeErr)
 		}
-		c.conn = nil
 		return nil, fmt.Errorf("failed to send getinfo command: %w", err)
 	}
 
@@ -119,10 +121,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			if closeErr := c.conn.Close(); closeErr != nil {
+			closeErr := c.conn.Close()
+			c.conn = nil
+			if closeErr != nil {
 				return nil, fmt.Errorf("failed to read getinfo response: %w (close error: %v)", err, closeErr)
 			}
-			c.conn = nil
 			return nil, fmt.Errorf("failed to read getinfo response: %w", err)
 		}
 
@@ -144,10 +147,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 			for {
 				dataLine, err := reader.ReadString('\n')
 				if err != nil {
-					if closeErr := c.conn.Close(); closeErr != nil {
+					closeErr := c.conn.Close()
+					c.conn = nil
+					if closeErr != nil {
 						return nil, fmt.Errorf("failed to read multiline data: %w (close error: %v)", err, closeErr)
 					}
-					c.conn = nil
 					return nil, fmt.Errorf("failed to read multiline data: %w", err)
 				}
 				dataLine = strings.TrimSpace(dataLine)
@@ -234,20 +238,22 @@ func (c *Client) Signal(sig string) error {
 
 	cmd := fmt.Sprintf("SIGNAL %s\r\n", sig)
 	if _, err := c.conn.Write([]byte(cmd)); err != nil {
-		if closeErr := c.conn.Close(); closeErr != nil {
+		closeErr := c.conn.Close()
+		c.conn = nil
+		if closeErr != nil {
 			return fmt.Errorf("failed to send signal: %w (close error: %v)", err, closeErr)
 		}
-		c.conn = nil
 		return fmt.Errorf("failed to send signal: %w", err)
 	}
 
 	reader := bufio.NewReader(c.conn)
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		if closeErr := c.conn.Close(); closeErr != nil {
+		closeErr := c.conn.Close()
+		c.conn = nil
+		if closeErr != nil {
 			return fmt.Errorf("failed to read signal response: %w (close error: %v)", err, closeErr)
 		}
-		c.conn = nil
 		return fmt.Errorf("failed to read signal response: %w", err)
 	}
 
