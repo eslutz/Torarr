@@ -35,12 +35,24 @@ func TestLoad_Defaults(t *testing.T) {
 func TestLoad_CustomValues(t *testing.T) {
 	clearEnv()
 
-	os.Setenv("TOR_CONTROL_ADDRESS", "localhost:9999")
-	os.Setenv("TOR_CONTROL_PASSWORD", "secret123")
-	os.Setenv("HEALTH_PORT", "9000")
-	os.Setenv("HEALTH_EXTERNAL_TIMEOUT", "30")
-	os.Setenv("HEALTH_EXTERNAL_ENDPOINTS", "https://example.com/api,https://test.com/check")
-	os.Setenv("LOG_LEVEL", "debug")
+	if err := os.Setenv("TOR_CONTROL_ADDRESS", "localhost:9999"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("TOR_CONTROL_PASSWORD", "secret123"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("HEALTH_PORT", "9000"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("HEALTH_EXTERNAL_TIMEOUT", "30"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("HEALTH_EXTERNAL_ENDPOINTS", "https://example.com/api,https://test.com/check"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatal(err)
+	}
 
 	defer clearEnv()
 
@@ -130,11 +142,11 @@ func TestDefaultExternalEndpoints(t *testing.T) {
 }
 
 func clearEnv() {
-	os.Unsetenv("TOR_CONTROL_ADDRESS")
-	os.Unsetenv("TOR_CONTROL_PASSWORD")
-	os.Unsetenv("HEALTH_PORT")
-	os.Unsetenv("HEALTH_EXTERNAL_TIMEOUT")
-	os.Unsetenv("HEALTH_EXTERNAL_ENDPOINTS")
-	os.Unsetenv("LOG_LEVEL")
-	os.Unsetenv("TEST_INT")
+	_ = os.Unsetenv("TOR_CONTROL_ADDRESS")
+	_ = os.Unsetenv("TOR_CONTROL_PASSWORD")
+	_ = os.Unsetenv("HEALTH_PORT")
+	_ = os.Unsetenv("HEALTH_EXTERNAL_TIMEOUT")
+	_ = os.Unsetenv("HEALTH_EXTERNAL_ENDPOINTS")
+	_ = os.Unsetenv("LOG_LEVEL")
+	_ = os.Unsetenv("TEST_INT")
 }

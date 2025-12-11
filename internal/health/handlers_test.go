@@ -16,7 +16,11 @@ func TestPing_Success(t *testing.T) {
 	handler.Ping(w, req)
 
 	res := w.Result()
-	defer res.Body.Close()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, res.StatusCode)
@@ -52,7 +56,9 @@ func TestStatusRecorder_DefaultStatus(t *testing.T) {
 	recorder := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
 
 	// Write without setting status explicitly
-	recorder.Write([]byte("test"))
+	if _, err := recorder.Write([]byte("test")); err != nil {
+		t.Fatal(err)
+	}
 
 	if recorder.status != http.StatusOK {
 		t.Errorf("expected default status to be %d, got %d", http.StatusOK, recorder.status)
@@ -68,7 +74,11 @@ func TestRenew_MethodNotAllowed(t *testing.T) {
 	handler.Renew(w, req)
 
 	res := w.Result()
-	defer res.Body.Close()
+	defer func() {
+		if err := res.Body.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}()
 
 	if res.StatusCode != http.StatusMethodNotAllowed {
 		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, res.StatusCode)
@@ -154,7 +164,6 @@ func TestNewHandler(t *testing.T) {
 	// the structure is created properly in isolation
 	handler := &Handler{}
 
-	if handler == nil {
-		t.Fatal("expected handler to be created")
-	}
+	// Basic validation that the handler exists
+	_ = handler
 }

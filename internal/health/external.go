@@ -115,7 +115,11 @@ func (e *ExternalChecker) checkEndpointOnce(client *http.Client, endpoint string
 			Error:     err.Error(),
 		}
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			// Ignore close errors in this context
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		return &ExternalCheckResult{
