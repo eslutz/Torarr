@@ -1,6 +1,8 @@
 package tor
 
 import (
+	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -77,19 +79,12 @@ func TestParseBootstrapPhase(t *testing.T) {
 			status := &Status{}
 			if phase, ok := tt.input["status/bootstrap-phase"]; ok {
 				// This is the actual parsing logic from control.go
-				for _, field := range splitFields(phase) {
-					if len(field) > 9 && field[:9] == "PROGRESS=" {
-						progressStr := field[9:]
-						var progress int
-						// Simple integer parsing
-						for _, ch := range progressStr {
-							if ch >= '0' && ch <= '9' {
-								progress = progress*10 + int(ch-'0')
-							} else {
-								break
-							}
+				for _, field := range strings.Fields(phase) {
+					if strings.HasPrefix(field, "PROGRESS=") {
+						progressStr := strings.TrimPrefix(field, "PROGRESS=")
+						if progress, err := strconv.Atoi(progressStr); err == nil {
+							status.BootstrapPhase = progress
 						}
-						status.BootstrapPhase = progress
 					}
 				}
 			}
@@ -181,25 +176,17 @@ func TestParseTrafficStats(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			status := &Status{}
 			
-			// Simulate parsing logic
+			// Simulate parsing logic using standard library
 			if read, ok := tt.input["traffic/read"]; ok {
-				var val int64
-				for _, ch := range read {
-					if ch >= '0' && ch <= '9' {
-						val = val*10 + int64(ch-'0')
-					}
+				if val, err := strconv.ParseInt(read, 10, 64); err == nil {
+					status.Traffic.BytesRead = val
 				}
-				status.Traffic.BytesRead = val
 			}
 
 			if written, ok := tt.input["traffic/written"]; ok {
-				var val int64
-				for _, ch := range written {
-					if ch >= '0' && ch <= '9' {
-						val = val*10 + int64(ch-'0')
-					}
+				if val, err := strconv.ParseInt(written, 10, 64); err == nil {
+					status.Traffic.BytesWritten = val
 				}
-				status.Traffic.BytesWritten = val
 			}
 
 			if status.Traffic.BytesRead != tt.expectedRead {
@@ -211,28 +198,4 @@ func TestParseTrafficStats(t *testing.T) {
 			}
 		})
 	}
-}
-
-// Helper function to split fields (mimics strings.Fields behavior for testing)
-func splitFields(s string) []string {
-	var fields []string
-	var current string
-	inWord := false
-
-	for _, ch := range s {
-		if ch == ' ' || ch == '\t' || ch == '\n' {
-			if inWord {
-				fields = append(fields, current)
-				current = ""
-				inWord = false
-			}
-		} else {
-			current += string(ch)
-			inWord = true
-		}
-	}
-	if inWord {
-		fields = append(fields, current)
-	}
-	return fields
 }
