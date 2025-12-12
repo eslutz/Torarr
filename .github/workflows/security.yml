@@ -1,7 +1,6 @@
 # ==============================================================================
 # Security Pipeline
-# Runs container image scanning on a schedule.
-# Provides continuous vulnerability monitoring for dependencies between releases.
+# Runs container image vulnerability scanning.
 # ==============================================================================
 
 name: Security
@@ -10,9 +9,12 @@ name: Security
 # Triggers
 # ------------------------------------------------------------------------------
 on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
   schedule:
     - cron: "30 1 * * 0" # Weekly on Sunday at 01:30 UTC
-  workflow_dispatch:
 
 # ------------------------------------------------------------------------------
 # Concurrency
@@ -34,11 +36,10 @@ permissions:
 jobs:
   # ----------------------------------------------------------------------------
   # Trivy - Container image vulnerability scanning
-  # Scans for vulnerabilities in base image and installed OS packages.
-  # New CVEs can be discovered at any time, so this runs on schedule.
+  # Covers base image and installed OS packages
   # ----------------------------------------------------------------------------
-  trivy:
-    name: Trivy Scan
+  trivy-image:
+    name: Trivy Image Scan
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Source
