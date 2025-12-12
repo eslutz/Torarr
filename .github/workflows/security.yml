@@ -36,7 +36,8 @@ permissions:
 jobs:
   # ----------------------------------------------------------------------------
   # Trivy - Container image vulnerability scanning
-  # Scans the built Docker image for vulnerabilities
+  # Scans the image built from this repository's Dockerfile
+  # (includes base image + installed OS packages + app dependencies)
   # ----------------------------------------------------------------------------
   trivy-image:
     name: Trivy Image Scan
@@ -49,26 +50,30 @@ jobs:
         id: image
         run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
 
-      - name: Build Docker Image
-        run: docker build -t ${{ steps.image.outputs.name }}:scan .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Scan image with Trivy
-        run: |
-          mkdir -p trivy-results
-          echo "Scanning ${{ steps.image.outputs.name }}:scan..."
-          
-          docker run --rm \
-            -v /var/run/docker.sock:/var/run/docker.sock \
-            -v ${{ github.workspace }}/trivy-results:/results \
-            aquasec/trivy:latest image \
-            --format sarif \
-            --output /results/trivy-results.sarif \
-            --severity CRITICAL,HIGH \
-            --ignore-unfixed \
-            "${{ steps.image.outputs.name }}:scan" || echo "::warning::Scan failed for image"
+      - name: Build Docker image (local)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: ${{ steps.image.outputs.name }}:scan
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
-      - name: Upload Trivy results to GitHub Security
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ steps.image.outputs.name }}:scan"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy results to GitHub Security tab
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: trivy-results/trivy-results.sarif
-          category: trivy-container
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container"
