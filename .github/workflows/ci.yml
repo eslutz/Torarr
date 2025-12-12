@@ -64,10 +64,31 @@ jobs:
       - name: Run tests with coverage
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
-      - name: Enforce coverage >= 60%
+      - name: Calculate coverage excluding main and tor connection code
         run: |
-          go tool cover -func=coverage.out | awk '
-            /^total:/ { sub(/%/, "", $3); if ($3 < 60.0) { printf "Coverage below 60%%: %.1f%%\n", $3; exit 1 } }
+          # Remove excluded files from coverage profile
+          grep -v "cmd/healthserver/main.go" coverage.out | \
+          grep -v "internal/tor/control.go" > coverage-filtered.out || true
+          
+          # Ensure header is present
+          if ! head -n 1 coverage-filtered.out | grep -q "^mode:"; then
+            head -n 1 coverage.out > temp.out
+            cat coverage-filtered.out >> temp.out
+            mv temp.out coverage-filtered.out
+          fi
+
+      - name: Enforce coverage >= 60% (excluding main and tor connection code)
+        run: |
+          go tool cover -func=coverage-filtered.out | awk '
+            /^total:/ { 
+              sub(/%/, "", $3); 
+              printf "Coverage (excluding main and tor connection code): %.1f%%\n", $3
+              if ($3 < 60.0) { 
+                printf "Coverage below 60%% target: %.1f%%\n", $3
+                exit 1 
+              }
+              printf "✓ Coverage meets 60%% requirement\n"
+            }
           '
 
   # ----------------------------------------------------------------------------

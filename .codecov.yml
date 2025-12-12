@@ -1,0 +1,49 @@
+# ==============================================================================
+# Codecov Configuration
+# Defines coverage targets and exclusions for the Torarr project
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Coverage Configuration
+# ------------------------------------------------------------------------------
+coverage:
+  status:
+    project:
+      default:
+        target: 60%
+        threshold: 2%
+    patch:
+      default:
+        target: 60%
+        threshold: 2%
+
+  # Precision of coverage percentage (1 decimal place)
+  precision: 1
+  
+  # Round coverage to nearest decimal
+  round: down
+
+# ------------------------------------------------------------------------------
+# Ignore Paths
+# Exclude files/packages from coverage calculation
+# ------------------------------------------------------------------------------
+ignore:
+  # Main package - typically excluded from coverage requirements
+  - "cmd/healthserver/main.go"
+  
+  # Tor connection code - requires live Tor instance, not suitable for unit testing
+  - "internal/tor/control.go"
+
+# ------------------------------------------------------------------------------
+# Comment Configuration
+# ------------------------------------------------------------------------------
+comment:
+  layout: "reach,diff,flags,files,footer"
+  behavior: default
+  require_changes: false
+
+# ------------------------------------------------------------------------------
+# GitHub Checks
+# ------------------------------------------------------------------------------
+github_checks:
+  annotations: true
