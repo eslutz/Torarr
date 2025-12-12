@@ -1,59 +1,34 @@
-# Torarr - Custom Tor Proxy Container
+# Torarr
 
 [![Workflow Status](https://github.com/eslutz/torarr/actions/workflows/release.yml/badge.svg)](https://github.com/eslutz/torarr/actions/workflows/release.yml)
 [![Security Check](https://github.com/eslutz/torarr/actions/workflows/security.yml/badge.svg)](https://github.com/eslutz/torarr/actions/workflows/security.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/eslutz/torarr)](https://goreportcard.com/report/github.com/eslutz/torarr)
 [![License](https://img.shields.io/github/license/eslutz/torarr)](LICENSE)
-[![Release](https://img.shields.io/github/v/release/eslutz/torarr?color=007ec6)](https://github.com/eslutz/torarr/releases)
+[![Release](https://img.shields.io/github/v/release/eslutz/torarr?color=007ec6)](https://github.com/eslutz/torarr/releases/latest)
 
-A lightweight, health-monitored Tor proxy container designed as a sidecar for the *arr stack (Sonarr, Radarr, Prowlarr, etc.). Built with Go for minimal footprint (~25MB) and fast startup times.
+A lightweight, production-ready Tor SOCKS proxy container with a Go health/metrics sidecar. Designed for the *arr stack (Sonarr, Radarr, Prowlarr, etc.).
 
 ## Features
 
-- **Lightweight**: Alpine-based image (~25MB total)
-- **Health Monitoring**: Multiple health check endpoints with different verification levels
-- **Fast Restarts**: Persistent volume for Tor consensus cache
+- **Tor SOCKS Proxy**: Exposes SOCKS5 on port 9050
+- **Health & Readiness**: Kubernetes-compatible endpoints for liveness/readiness
+- **Tor Egress Verification**: Optional external checks via `/ready`
+- **Circuit Renewal**: `POST /renew` sends `NEWNYM` to request a new circuit
+- **Prometheus Metrics**: `/metrics` endpoint + included Grafana dashboard
 - **Multi-Architecture**: Supports `linux/amd64` and `linux/arm64`
-- **Zero External Dependencies**: Pure Go stdlib for HTTP routing
-- **Metrics Ready**: Prometheus `/metrics` endpoint with Grafana dashboard template
-- **Production Ready**: Graceful shutdown, signal handling, and comprehensive logging
-
-## Architecture
-
-```txt
-┌─────────────────────────────────────────────────────────┐
-│                    Torarr Container                     │
-├─────────────────────────────────────────────────────────┤
-│                                                         │
-│  ┌──────────────┐         ┌──────────────────────────┐  │
-│  │     Tor      │◄───────►│   Health Server (Go)     │  │
-│  │              │  9051   │                          │  │
-│  │  SOCKS:9050  │ Control │  HTTP:8085               │  │
-│  │              │  Port   │  ├─ GET /ping            │  │
-│  └──────────────┘         │  ├─ GET /health          │  │
-│         │                 │  ├─ GET /ready           │  │
-│         │                 │  └─ GET /status          │  │
-│         ▼                 └──────────────────────────┘  │
-│  ┌──────────────┐                                       │
-│  │ /var/lib/tor │                                       │
-│  │   (volume)   │                                       │
-│  │  Consensus   │                                       │
-│  │    Cache     │                                       │
-│  └──────────────┘                                       │
-└─────────────────────────────────────────────────────────┘
-```
+- **Non-Root Runtime**: Runs as a dedicated `tor` user in the container
 
 ## Quick Start
 
 ### Docker Compose
 
-See [docs/docker-compose.example.yml](docs/docker-compose.example.yml) for a complete example.
+See [docs/docker-compose.example.yml](docs/docker-compose.example.yml).
 
 ### Docker CLI
 
 ```bash
 docker run -d \
-  --name tor-proxy \
+  --name torarr \
   -p 127.0.0.1:9050:9050 \
   -p 127.0.0.1:8085:8085 \
   -e TZ=America/New_York \
@@ -62,350 +37,135 @@ docker run -d \
   ghcr.io/eslutz/torarr:latest
 ```
 
-## Health Endpoints
+## Configuration
 
-Torarr provides multiple health check endpoints with different verification levels:
+All application configuration is done via environment variables. An example file is available at [docs/.env.example](docs/.env.example).
 
-| Endpoint | Purpose | Speed | External Deps | Use Case |
-|----------|---------|-------|---------------|----------|
-| `GET /ping` | Liveness check | <1ms | None | Container orchestrator liveness probe |
-| `GET /health` | Readiness check | <50ms | None | Container orchestrator readiness probe |
-| `GET /ready` | Tor egress readiness | 1-15s | Tor network | Ensure traffic can exit via Tor before routing requests |
-| `GET /status` | Full Tor status | <50ms | None | Monitoring/debugging |
-| `GET /metrics` | Prometheus metrics | <10ms | None | Prometheus/Grafana scraping |
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `TZ` | `UTC` | Container timezone |
+| `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARN, ERROR) |
+| `HEALTH_PORT` | `8085` | HTTP server port for health/metrics |
+| `HEALTH_EXTERNAL_TIMEOUT` | `15` | Timeout (seconds) for external Tor egress checks |
+| `HEALTH_EXTERNAL_ENDPOINTS` | `https://check.torproject.org/api/ip` | Comma-separated URLs for external Tor egress verification |
+| `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address for the health server |
+| `TOR_CONTROL_PASSWORD` | *(auto-generated)* | Tor control password used by the health server; generated at startup if unset |
+| `TOR_EXIT_NODES` | *(none)* | Optional exit node selector (e.g. `{us},{ca}`) |
 
-### Endpoint Details
+## Architecture
 
-#### `/ping` - Liveness Check
-
-Returns immediately with `{"status":"OK"}`. Use for container liveness probes.
-
-```bash
-curl http://localhost:8085/ping
+```txt
+┌────────────────────────────────────────────────────────────┐
+│                         Torarr                             │
+├────────────────────────────────────────────────────────────┤
+│  ┌──────────────┐      control port      ┌───────────────┐ │
+│  │     Tor      │◄──────────────────────►│  Healthserver  │ │
+│  │ SOCKS :9050  │        :9051           │ HTTP :8085     │ │
+│  └──────┬───────┘                        └───────────────┘ │
+│         │                                                   │
+│         ▼                                                   │
+│   /var/lib/tor  (mount as volume for faster restarts)       │
+└────────────────────────────────────────────────────────────┘
 ```
 
-#### `/health` - Readiness Check
+**How it works:**
 
-Checks Tor control port and bootstrap status. Returns ready when bootstrap ≥100%.
+1. The entrypoint hashes `TOR_CONTROL_PASSWORD` (or generates one) and updates `/etc/tor/torrc`
+2. Tor runs as the main process and exposes SOCKS5 on `:9050`
+3. The Go health server queries Tor via the control port and exposes HTTP endpoints on `:${HEALTH_PORT}`
+4. `/ready` verifies Tor egress by calling external endpoints through the SOCKS proxy
 
-```bash
-curl http://localhost:8085/health
-```
+## Tor Configuration
 
-**Response (Ready):**
+Tor uses the `torrc` file in the repository root (copied into the image at `/etc/tor/torrc`). The entrypoint modifies it at startup (control password hashing, optional exit nodes).
 
-```json
-{
-  "status": "READY"
-}
-```
+If you want to customize Tor settings, mount your own `torrc` **as writable** (the entrypoint needs to update `HashedControlPassword`).
 
-**Response (Not Ready):**
+## HTTP Endpoints
 
-```json
-{
-  "status": "NOT_READY",
-  "error": "tor not ready"
-}
-```
+| Endpoint | Purpose | Response |
+|----------|---------|----------|
+| `GET /ping` | Liveness probe | `200 OK` if running |
+| `GET /health` | Tor bootstrap readiness | `200 OK` when bootstrap is 100% |
+| `GET /ready` | Tor egress verification | `200 OK` if external check succeeds and `IsTor=true` |
+| `GET /status` | Diagnostics | JSON status snapshot |
+| `GET /metrics` | Prometheus metrics | OpenMetrics/Prometheus format |
+| `POST /renew` | Request a new circuit | `200 OK` if `NEWNYM` was sent |
 
-#### `/ready` - Tor Egress Readiness
+### Endpoint Usage
 
-Verifies external connectivity through the Tor SOCKS proxy using configured endpoints (defaults target Tor check services). Useful as a readiness probe to ensure Tor egress works before routing Prowlarr traffic.
+- **/ping**: Liveness probe (restart container if it fails)
+- **/health**: Readiness probe for Tor bootstrap
+- **/ready**: Readiness probe when you need confirmed Tor egress (makes outbound requests)
+- **/status**: Manual debugging/monitoring snapshot
+- **/metrics**: Prometheus scraping target
 
-**⚠️ Important**: Use cautiously; it makes outbound requests on each call. Suitable for readiness checks with sensible intervals/backoff.
+## Prometheus Metrics
 
-```bash
-curl http://localhost:8085/ready
-```
+| Metric | Type | Description |
+|--------|------|-------------|
+| `torarr_info` | Gauge | Build information (version, commit, date, go_version) |
+| `torarr_http_requests_total` | Counter | Total HTTP requests (labels: path, method, code) |
+| `torarr_http_request_duration_seconds` | Histogram | HTTP request durations (labels: path, method, code) |
+| `torarr_tor_bootstrap_percent` | Gauge | Tor bootstrap percent |
+| `torarr_tor_circuit_established` | Gauge | Circuit established (1/0) |
+| `torarr_tor_ready` | Gauge | Readiness derived from circuit state (1/0) |
+| `torarr_tor_bytes_read` | Gauge | Bytes read (Tor traffic stats) |
+| `torarr_tor_bytes_written` | Gauge | Bytes written (Tor traffic stats) |
+| `torarr_external_check_total` | Counter | External check attempts (labels: endpoint, success, is_tor) |
 
-**Response (Tor egress working):**
+## Grafana Dashboard
 
-```json
-{
-  "success": true,
-  "is_tor": true,
-  "ip": "185.220.101.1",
-  "endpoint": "https://check.torproject.org/api/ip",
-  "checked_at": "2024-01-15T12:00:00Z"
-}
-```
+Import [docs/torarr-grafana-dashboard.json](docs/torarr-grafana-dashboard.json) into Grafana.
 
-**Response (Not Connected via Tor):**
+## Releases
 
-```json
-{
-  "success": false,
-  "is_tor": false,
-  "error": "all endpoints failed",
-  "checked_at": "2024-01-15T12:00:00Z"
-}
-```
+Releases are driven by the `VERSION` file:
 
-#### `/status` - Full Status
+1. CI runs on PRs and pushes to `main`
+2. After CI succeeds on `main`, the release workflow reads `VERSION`
+3. If the corresponding tag (e.g. `v0.1.0`) doesn't exist, it creates the tag, pushes a multi-arch image, and creates a GitHub Release
 
-Returns detailed Tor status including version, bootstrap phase, circuits, and traffic.
-
-```bash
-curl http://localhost:8085/status
-```
-
-**Response:**
-
-```json
-{
-  "status": "OK",
-  "version": "0.4.8.10",
-  "bootstrap_phase": 100,
-  "circuit_established": true,
-  "num_circuits": 3,
-  "traffic": {
-    "bytes_read": 1048576,
-    "bytes_written": 524288
-  }
-}
-```
-
-#### `/metrics` - Prometheus Metrics
-
-Exposes Prometheus-format metrics for HTTP requests, Tor readiness/traffic, and external check outcomes.
-
-```bash
-curl http://localhost:8085/metrics
-```
-
-Prometheus scrape example:
-
-```yaml
-scrape_configs:
-  - job_name: torarr
-    static_configs:
-      - targets: ['tor-proxy:8085']
-```
-
-### Grafana Dashboard
-
-Import `docs/torarr-dashboard.json` into Grafana and select your Prometheus datasource. Panels include readiness, bootstrap progress, traffic, request rates, and external check results.
-
-## Environment Variables
-
-Torarr is configured using environment variables. You can set these directly in your `docker-compose.yml` or use a `.env` file.
-
-### Using a .env file
-
-1. Copy the example file:
-
-   ```bash
-   cp docs/.env.example .env
-   ```
-
-2. Edit `.env` with your desired configuration.
-3. Docker Compose will automatically pick up these values.
-
-See [.env.example](docs/.env.example) for a complete list of available variables and their descriptions.
-
-**Default External Endpoints:**
-
-- `https://check.torproject.org/api/ip`
-- `https://check.dan.me.uk/`
-- `https://ipinfo.io/json`
-
-## Integration with *arr Stack
-
-### Prowlarr Example
-
-```yaml
-version: '3.8'
-
-services:
-  tor-proxy:
-    image: ghcr.io/eslutz/torarr:latest
-    container_name: tor-proxy
-    environment:
-      - TZ=America/New_York
-    ports:
-      - "127.0.0.1:9050:9050"
-    volumes:
-      - tor-data:/var/lib/tor
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8085/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 60s
-
-  prowlarr:
-    image: lscr.io/linuxserver/prowlarr:latest
-    container_name: prowlarr
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=America/New_York
-    volumes:
-      - ./prowlarr:/config
-    ports:
-      - "9696:9696"
-    restart: unless-stopped
-    depends_on:
-      tor-proxy:
-        condition: service_healthy
-
-volumes:
-  tor-data:
-```
-
-**Configure Prowlarr to use Tor:**
-
-1. Open Prowlarr web interface
-2. Go to Settings → Indexers
-3. Add/Edit indexer
-4. Under "Proxy Settings":
-   - Type: `SOCKS5`
-   - Hostname: `tor-proxy` (or `127.0.0.1` if not using Docker network)
-   - Port: `9050`
-
-## Persistent Volume
-
-**Important**: Mount `/var/lib/tor` as a persistent volume for:
-
-- Faster restarts (cached Tor consensus)
-- Reduced Tor network load
-- Consistent guard relay selection
-
-Without persistence, Tor must download fresh consensus on each restart (~30-60s delay).
-
-## Troubleshooting
-
-### Check Tor Bootstrap Status
-
-```bash
-curl http://localhost:8085/status
-```
-
-Look for `bootstrap_phase: 100` and `circuit_established: true`.
-
-### View Container Logs
-
-```bash
-docker logs tor-proxy
-```
-
-### Test SOCKS Proxy Directly
-
-```bash
-curl --socks5-hostname localhost:9050 https://check.torproject.org/api/ip
-```
-
-Expected response: `{"IsTor":true,"IP":"..."}`
-
-### Container Won't Start
-
-1. Check if ports 9050/8085 are available:
-
-   ```bash
-   netstat -tuln | grep -E '9050|8085'
-   ```
-
-2. Verify volume permissions:
-
-   ```bash
-   docker volume inspect tor-data
-   ```
-
-3. Check for conflicting Tor instances:
-
-   ```bash
-   pgrep -a tor
-   ```
-
-### Tor Bootstrap Stuck
-
-If `bootstrap_phase` is stuck below 100:
-
-1. Check internet connectivity
-2. Verify no firewall blocking Tor (ports 443, 9001, 9030)
-3. Try deleting volume and restarting:
-
-   ```bash
-   docker-compose down
-   docker volume rm tor-data
-   docker-compose up -d
-   ```
-
-### External Verification Fails
-
-If `/ready` shows `is_tor: false`:
-
-1. Check if SOCKS proxy is working (see above)
-2. Verify external endpoints are accessible
-3. Check logs for DNS resolution issues
-4. Some external services may be temporarily down (check multiple endpoints)
+To cut a new release: update `VERSION` and merge to `main`.
 
 ## Building from Source
 
 ```bash
 git clone https://github.com/eslutz/torarr.git
 cd torarr
+
+# Build binary
+go build -o healthserver ./cmd/healthserver
+
+# Build Docker image
 docker build -t torarr:local .
-```
-
-### Multi-Architecture Build
-
-```bash
-docker buildx build \
-  --platform linux/amd64,linux/arm64 \
-  -t ghcr.io/eslutz/torarr:latest \
-  --push .
 ```
 
 ## Contributing
 
-Contributions welcome! Please:
-
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests if applicable
+4. Run tests and lint
 5. Submit a pull request
-
-### Automated Releases & Versioning
-
-Releases are fully automated based on commit messages using Semantic Versioning:
-
-- **fix:** triggers a Patch release (v1.0.0 -> v1.0.1)
-- **feat:** triggers a Minor release (v1.0.0 -> v1.1.0)
-- **BREAKING CHANGE:** triggers a Major release (v1.0.0 -> v2.0.0)
-
-On every push to `main`, the system builds the Docker image, tags it, and creates a GitHub Release with a changelog.
 
 ## Security
 
-- **Tor Control Password**: A random password is automatically generated on container startup and hashed for `torrc`. This ensures every instance is unique and secure.
-- **Health Server**: Binds to all interfaces (0.0.0.0) to allow container orchestration health checks.
-- **SOCKS Proxy**: Should be bound to localhost or a private network in production (default in docker-compose).
-- **Logging**: No sensitive data (like passwords) is logged.
+- Don't expose the SOCKS proxy publicly; bind it to localhost or a private network.
+- The Tor control password is generated at startup if unset; treat container logs as sensitive if you rely on auto-generation.
 
-**Reporting Security Issues**: Please email <security@example.com> (do not open public issues)
+Report vulnerabilities via GitHub Security Advisories:
+<https://github.com/eslutz/torarr/security/advisories/new>
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details
+This project is licensed under the MIT License - see [LICENSE](LICENSE).
 
 ## Acknowledgments
 
-- [Tor Project](https://www.torproject.org/) for the Tor software
-- [Alpine Linux](https://alpinelinux.org/) for the minimal base image
-- *arr community for inspiration
+- [Tor Project](https://www.torproject.org/) - Anonymous communication network
+- [Prometheus](https://prometheus.io/) - Monitoring system and time series database
 
-## Roadmap
+## Related Projects
 
-- [x] Prometheus metrics endpoint
-- [ ] Configurable circuit refresh intervals
-- [ ] Bridge support for censored networks
-- [ ] Bandwidth statistics dashboard
-- [ ] Multi-proxy load balancing
-
----
-
-**Note**: This is not affiliated with or endorsed by the Tor Project. Use responsibly and in accordance with local laws.
+- [Forwardarr](https://github.com/eslutz/forwardarr) - SPort update container for Gluetun to qBittorrent port syncing that updates the listening port on change

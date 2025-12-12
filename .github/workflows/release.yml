@@ -1,164 +1,108 @@
 # ==============================================================================
 # Release Pipeline
-# Runs when a version tag (v*) is pushed.
-# Runs unit tests, linting, and security checks before building production images.
+# Runs after CI succeeds on the main branch.
+# Reads VERSION file, creates git tag, builds/pushes image, and creates release.
 # ==============================================================================
 
 name: Release
 
-# ------------------------------------------------------------------------------
-# Triggers
-# ------------------------------------------------------------------------------
 on:
-  push:
-    tags:
-      - "v*"
+  workflow_run:
+    workflows: ["CI"]
+    branches: [main]
+    types:
+      - completed
 
-# ------------------------------------------------------------------------------
-# Permissions
-# ------------------------------------------------------------------------------
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
   packages: write
-  security-events: write
 
-# ------------------------------------------------------------------------------
-# Environment Variables
-# ------------------------------------------------------------------------------
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
 
-# ------------------------------------------------------------------------------
-# Jobs
-# ------------------------------------------------------------------------------
 jobs:
-  # ----------------------------------------------------------------------------
-  # Test - Run unit tests with coverage
-  # ----------------------------------------------------------------------------
-  test:
-    name: Test
+  check:
+    name: Check Version
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25"
-
-      - name: Run tests
-        run: go test -v -race -coverprofile=coverage.txt -covermode=atomic ./...
-
-  # ----------------------------------------------------------------------------
-  # Lint - Code quality checks
-  # ----------------------------------------------------------------------------
-  lint:
-    name: Lint
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v6
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.25"
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-
-  # ----------------------------------------------------------------------------
-  # CodeQL - Static analysis for security vulnerabilities
-  # ----------------------------------------------------------------------------
-  codeql:
-    name: CodeQL Analysis
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v6
-
-      - name: Initialize CodeQL
-        uses: github/codeql-action/init@v4
-        with:
-          languages: go
-          queries: security-extended,security-and-quality
-
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v4
-
-      - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v4
-        with:
-          category: "/language:go"
-
-  # ----------------------------------------------------------------------------
-  # Trivy - Container image vulnerability scanning
-  # Scans for vulnerabilities in base image and installed OS packages
-  # ----------------------------------------------------------------------------
-  trivy:
-    name: Trivy Scan
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      security-events: write
-    steps:
-      - name: Checkout Source
-        uses: actions/checkout@v6
-
-      - name: Set image name
-        id: image
-        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
-
-      - name: Build Docker Image
-        run: docker build -t ${{ steps.image.outputs.name }}:scan .
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: "${{ steps.image.outputs.name }}:scan"
-          format: "sarif"
-          output: "trivy-results.sarif"
-          ignore-unfixed: true
-          vuln-type: "os,library"
-          severity: "CRITICAL,HIGH"
-
-      - name: Upload Trivy results to GitHub Security tab
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: "trivy-results.sarif"
-          category: "trivy-container"
-
-  # ----------------------------------------------------------------------------
-  # Release: Build, tag, and publish container image
-  # ----------------------------------------------------------------------------
-  release:
-    name: Release
-    runs-on: ubuntu-latest
-    needs: [test, lint, codeql, trivy]
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      is_prerelease: ${{ steps.version.outputs.is_prerelease }}
+      exists: ${{ steps.check.outputs.exists }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # Fetch all history for changelog generation
+          ref: ${{ github.event.workflow_run.head_sha }}
 
-      # Used for build-time metadata
+      - name: Read VERSION file
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(cat VERSION | tr -d '[:space:]')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          if [[ "$version" == *-* ]]; then
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check if tag exists
+        id: check
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        shell: bash
+        run: |
+          if git ls-remote --tags origin "refs/tags/$TAG" | grep -q .; then
+            echo "Tag $TAG already exists."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag $TAG is new."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  release:
+    name: Release
+    needs: check
+    if: needs.check.outputs.exists == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 0
+
       - name: Get current date
         id: date
         run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
 
-      # Required for multi-arch builds (amd64/arm64)
+      - name: Create and push git tag
+        env:
+          TAG: ${{ needs.check.outputs.tag }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" "$SHA" -m "Release $TAG"
+          git push origin "$TAG"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
-      # Required for building multi-platform images
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      # Authenticate with GHCR to push images
       - name: Log in to Container Registry
         uses: docker/login-action@v3
         with:
@@ -166,21 +110,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      # Generate tags:
-      # - SemVer (v1.2.3)
-      # - Major.Minor (v1.2)
-      # - latest (ONLY if it's not a pre-release)
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+            type=raw,value=${{ needs.check.outputs.tag }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.check.outputs.version }},enable=${{ needs.check.outputs.is_prerelease == 'false' }}
+            type=raw,value=latest,enable=${{ needs.check.outputs.is_prerelease == 'false' }}
 
-      # Builds the image for multiple platforms and pushes to GHCR
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -191,34 +130,25 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Inject version info into the Go binary via build args
           build-args: |
-            VERSION=${{ github.ref_name }}
-            COMMIT=${{ github.sha }}
+            VERSION=${{ needs.check.outputs.tag }}
+            COMMIT=${{ github.event.workflow_run.head_sha }}
             DATE=${{ steps.date.outputs.date }}
 
-      # Create a GitHub Release
-      - name: Create Release
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
-          IS_PRERELEASE: ${{ contains(github.ref, '-') }}
+          TAG: ${{ needs.check.outputs.tag }}
+          IS_PRERELEASE: ${{ needs.check.outputs.is_prerelease }}
         shell: bash
         run: |
           set -euo pipefail
 
-          # Build flags based on whether this is a prerelease tag
           flags=(--generate-notes)
           if [[ "$IS_PRERELEASE" == "true" ]]; then
             flags+=(--prerelease --latest=false)
           else
             flags+=(--latest)
-          fi
-
-          # Skip if the release already exists (helps reruns on the same tag)
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; skipping creation."
-            exit 0
           fi
 
           gh release create "$TAG" "${flags[@]}"
