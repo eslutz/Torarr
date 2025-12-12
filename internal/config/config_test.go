@@ -85,7 +85,9 @@ func TestLoad_CustomValues(t *testing.T) {
 
 func TestGetEnvAsInt_InvalidValue(t *testing.T) {
 	clearEnv()
-	os.Setenv("TEST_INT", "not_a_number")
+	if err := os.Setenv("TEST_INT", "not_a_number"); err != nil {
+		t.Fatal(err)
+	}
 	defer clearEnv()
 
 	result := getEnvAsInt("TEST_INT", 42)
