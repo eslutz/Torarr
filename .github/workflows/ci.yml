@@ -64,6 +64,13 @@ jobs:
       - name: Run tests with coverage
         run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
 
+      - name: Display coverage summary
+        run: |
+          echo "================================"
+          echo "Overall Coverage (all files):"
+          echo "================================"
+          go tool cover -func=coverage.out | tail -1
+
       - name: Calculate coverage excluding main and tor connection code
         run: |
           # Remove excluded files from coverage profile
@@ -79,17 +86,32 @@ jobs:
 
       - name: Enforce coverage >= 60% (excluding main and tor connection code)
         run: |
+          echo ""
+          echo "======================================="
+          echo "Filtered Coverage (excluding files):"
+          echo "  - cmd/healthserver/main.go"
+          echo "  - internal/tor/control.go"
+          echo "======================================="
           go tool cover -func=coverage-filtered.out | awk '
             /^total:/ { 
               sub(/%/, "", $3); 
-              printf "Coverage (excluding main and tor connection code): %.1f%%\n", $3
+              printf "Coverage: %.1f%%\n\n", $3
               if ($3 < 60.0) { 
-                printf "Coverage below 60%% target: %.1f%%\n", $3
+                printf "❌ Coverage below 60%% target: %.1f%%\n", $3
                 exit 1 
               }
-              printf "✓ Coverage meets 60%% requirement\n"
+              printf "✓ Coverage meets 60%% requirement (%.1f%%)\n", $3
             }
           '
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-torarr
+          fail_ci_if_error: false
+          verbose: true
 
   # ----------------------------------------------------------------------------
   # Lint: Code quality checks
