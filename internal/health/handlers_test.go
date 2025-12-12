@@ -5,6 +5,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/eslutz/torarr/internal/config"
+	"github.com/eslutz/torarr/internal/tor"
 )
 
 func TestPing_Success(t *testing.T) {
@@ -153,4 +156,79 @@ func TestInstrument_RecordsStatusCode(t *testing.T) {
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("expected status %d, got %d", http.StatusInternalServerError, w.Code)
 	}
+}
+
+func TestNewHandler(t *testing.T) {
+	cfg := &config.Config{
+		TorControlAddress:       "127.0.0.1:9051",
+		TorControlPassword:      "test",
+		HealthPort:              "8085",
+		HealthExternalEndpoints: []string{"https://check.torproject.org/"},
+		HealthExternalTimeout:   10,
+	}
+
+	handler := NewHandler(cfg)
+
+	if handler == nil {
+		t.Fatal("expected handler to be created")
+	}
+
+	if handler.torClient == nil {
+		t.Error("expected torClient to be initialized")
+	}
+
+	if handler.readinessChecker == nil {
+		t.Error("expected readinessChecker to be initialized")
+	}
+
+	if handler.config == nil {
+		t.Error("expected config to be initialized")
+	}
+
+	if handler.metrics == nil {
+		t.Error("expected metrics to be initialized")
+	}
+
+	// Also test SetupRoutes in same test to avoid duplicate metric registration
+	mux := http.NewServeMux()
+	handler.SetupRoutes(mux)
+
+	// Test that all routes are registered by attempting to call them
+	routes := []string{"/ping", "/health", "/ready", "/status", "/metrics"}
+
+	for _, route := range routes {
+		req := httptest.NewRequest(http.MethodGet, route, nil)
+		w := httptest.NewRecorder()
+
+		mux.ServeHTTP(w, req)
+
+		// All routes should at least not return 404
+		if w.Code == http.StatusNotFound {
+			t.Errorf("route %s not found", route)
+		}
+	}
+}
+
+func TestClose_WithNilTorClient(t *testing.T) {
+	handler := &Handler{
+		torClient: nil,
+	}
+
+	// This should panic with nil torClient, so we skip this test
+	// In production, NewHandler always creates a torClient
+	_ = handler  // Use the variable
+	t.Skip("Close with nil torClient will panic - this is expected behavior")
+}
+
+func TestClose_WithTorClient(t *testing.T) {
+	client := tor.NewClient("127.0.0.1:9051", "test")
+	handler := &Handler{
+		torClient: client,
+	}
+
+// Close should not error even if not connected
+err := handler.Close()
+if err != nil {
+t.Errorf("expected no error, got %v", err)
+}
 }

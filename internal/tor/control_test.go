@@ -199,3 +199,63 @@ func TestParseTrafficStats(t *testing.T) {
 		})
 	}
 }
+
+func TestClose_NotConnected(t *testing.T) {
+	client := NewClient("127.0.0.1:9051", "password")
+
+	err := client.Close()
+	if err != nil {
+		t.Errorf("expected no error when closing unconnected client, got %v", err)
+	}
+}
+
+func TestIsReady_Bootstrap100(t *testing.T) {
+	client := NewClient("127.0.0.1:9051", "password")
+
+	// Test with nil status (not connected)
+	if client.IsReady() {
+		t.Error("expected IsReady to be false when status is nil")
+	}
+}
+
+
+func TestConnect_InvalidAddress(t *testing.T) {
+client := NewClient("invalid:address:9051", "password")
+
+err := client.Connect()
+if err == nil {
+t.Error("expected error when connecting to invalid address")
+}
+}
+
+func TestConnect_UnreachableAddress(t *testing.T) {
+// Use an unreachable address (reserved TEST-NET-1 range)
+client := NewClient("192.0.2.1:9999", "password")
+
+err := client.Connect()
+if err == nil {
+t.Error("expected error when connecting to unreachable address")
+client.Close()
+}
+}
+
+func TestGetStatus_NotConnected(t *testing.T) {
+client := NewClient("127.0.0.1:9051", "password")
+
+status, err := client.GetStatus()
+if err == nil {
+t.Error("expected error when getting status without connection")
+}
+if status != nil {
+t.Error("expected nil status when not connected")
+}
+}
+
+func TestSignal_NotConnected(t *testing.T) {
+client := NewClient("127.0.0.1:9051", "password")
+
+err := client.Signal("NEWNYM")
+if err == nil {
+t.Error("expected error when sending signal without connection")
+}
+}

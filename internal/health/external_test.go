@@ -237,3 +237,4 @@ func TestExternalCheckResult_WithError(t *testing.T) {
 		t.Errorf("expected Error to be 'connection timeout', got '%s'", result.Error)
 	}
 }
+
