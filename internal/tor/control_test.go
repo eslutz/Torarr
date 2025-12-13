@@ -235,7 +235,7 @@ client := NewClient("192.0.2.1:9999", "password")
 err := client.Connect()
 if err == nil {
 t.Error("expected error when connecting to unreachable address")
-client.Close()
+_ = client.Close()
 }
 }
 
