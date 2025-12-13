@@ -18,11 +18,11 @@ type Client struct {
 }
 
 type Status struct {
-	Version         string
-	BootstrapPhase  int
+	Version            string
+	BootstrapPhase     int
 	CircuitEstablished bool
-	NumCircuits     int
-	Traffic         TrafficStats
+	NumCircuits        int
+	Traffic            TrafficStats
 }
 
 type TrafficStats struct {
@@ -54,8 +54,11 @@ func (c *Client) Connect() error {
 
 	if c.password != "" {
 		if err := c.authenticate(); err != nil {
-			c.conn.Close()
+			closeErr := c.conn.Close()
 			c.conn = nil
+			if closeErr != nil {
+				return fmt.Errorf("authentication failed: %w (close error: %v)", err, closeErr)
+			}
 			return err
 		}
 	}
@@ -104,8 +107,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 
 	cmd := fmt.Sprintf("GETINFO %s\r\n", strings.Join(keys, " "))
 	if _, err := c.conn.Write([]byte(cmd)); err != nil {
-		c.conn.Close()
+		closeErr := c.conn.Close()
 		c.conn = nil
+		if closeErr != nil {
+			return nil, fmt.Errorf("failed to send getinfo command: %w (close error: %v)", err, closeErr)
+		}
 		return nil, fmt.Errorf("failed to send getinfo command: %w", err)
 	}
 
@@ -115,8 +121,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			c.conn.Close()
+			closeErr := c.conn.Close()
 			c.conn = nil
+			if closeErr != nil {
+				return nil, fmt.Errorf("failed to read getinfo response: %w (close error: %v)", err, closeErr)
+			}
 			return nil, fmt.Errorf("failed to read getinfo response: %w", err)
 		}
 
@@ -138,8 +147,11 @@ func (c *Client) GetInfo(keys ...string) (map[string]string, error) {
 			for {
 				dataLine, err := reader.ReadString('\n')
 				if err != nil {
-					c.conn.Close()
+					closeErr := c.conn.Close()
 					c.conn = nil
+					if closeErr != nil {
+						return nil, fmt.Errorf("failed to read multiline data: %w (close error: %v)", err, closeErr)
+					}
 					return nil, fmt.Errorf("failed to read multiline data: %w", err)
 				}
 				dataLine = strings.TrimSpace(dataLine)
@@ -226,16 +238,22 @@ func (c *Client) Signal(sig string) error {
 
 	cmd := fmt.Sprintf("SIGNAL %s\r\n", sig)
 	if _, err := c.conn.Write([]byte(cmd)); err != nil {
-		c.conn.Close()
+		closeErr := c.conn.Close()
 		c.conn = nil
+		if closeErr != nil {
+			return fmt.Errorf("failed to send signal: %w (close error: %v)", err, closeErr)
+		}
 		return fmt.Errorf("failed to send signal: %w", err)
 	}
 
 	reader := bufio.NewReader(c.conn)
 	response, err := reader.ReadString('\n')
 	if err != nil {
-		c.conn.Close()
+		closeErr := c.conn.Close()
 		c.conn = nil
+		if closeErr != nil {
+			return fmt.Errorf("failed to read signal response: %w (close error: %v)", err, closeErr)
+		}
 		return fmt.Errorf("failed to read signal response: %w", err)
 	}
 
@@ -245,4 +263,3 @@ func (c *Client) Signal(sig string) error {
 
 	return nil
 }
-

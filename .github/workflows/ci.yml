@@ -1,7 +1,8 @@
 # ==============================================================================
 # Continuous Integration Pipeline
 # Runs on Pull Requests and pushes to the main branch.
-# Builds Docker images for testing (pr-*) and bleeding edge (edge).
+# Executes unit tests with coverage enforcement, code linting, static security
+# analysis (CodeQL), and container image vulnerability scanning (Trivy).
 # ==============================================================================
 
 name: CI
@@ -18,7 +19,14 @@ on:
       - "docs/**"
       - "README.md"
       - ".github/**"
-  workflow_dispatch:
+  push:
+    branches:
+      - main
+    # Ignore documentation changes
+    paths-ignore:
+      - "docs/**"
+      - "README.md"
+      - ".github/**"
 
 # ------------------------------------------------------------------------------
 # Concurrency
@@ -39,13 +47,71 @@ env:
 # ------------------------------------------------------------------------------
 jobs:
   # ----------------------------------------------------------------------------
-  # Lint - Code quality checks
+  # Tests: Unit tests with coverage enforcement
+  # ----------------------------------------------------------------------------
+  tests:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.25"
+
+      - name: Run tests with coverage
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display coverage summary
+        run: |
+          echo "================================"
+          echo "Overall Coverage (all files):"
+          echo "================================"
+          go tool cover -func=coverage.out | tail -1
+
+      - name: Calculate coverage excluding main and tor connection code
+        run: |
+          # Remove excluded files from coverage profile
+          grep -v "cmd/healthserver/main.go" coverage.out | \
+          grep -v "internal/tor/control.go" > coverage-filtered.out || true
+
+          # Ensure header is present
+          if ! head -n 1 coverage-filtered.out | grep -q "^mode:"; then
+            head -n 1 coverage.out > temp.out
+            cat coverage-filtered.out >> temp.out
+            mv temp.out coverage-filtered.out
+          fi
+
+      - name: Enforce coverage >= 60% (excluding main and tor connection code)
+        run: |
+          echo ""
+          echo "======================================="
+          echo "Filtered Coverage (excluding files):"
+          echo "  - cmd/healthserver/main.go"
+          echo "  - internal/tor/control.go"
+          echo "======================================="
+          go tool cover -func=coverage-filtered.out | awk '
+            /^total:/ {
+              sub(/%/, "", $3);
+              printf "Coverage: %.1f%%\n\n", $3
+              if ($3 < 60.0) {
+                printf "❌ Coverage below 60%% target: %.1f%%\n", $3
+                exit 1
+              }
+              printf "✓ Coverage meets 60%% requirement (%.1f%%)\n", $3
+            }
+          '
+
+  # ----------------------------------------------------------------------------
+  # Lint: Code quality checks
   # ----------------------------------------------------------------------------
   lint:
     name: Lint
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Source
+      - name: Checkout code
         uses: actions/checkout@v6
 
       - name: Setup Go
@@ -59,78 +125,66 @@ jobs:
           version: latest
 
   # ----------------------------------------------------------------------------
-  # Build - Docker image build and push
+  # CodeQL: Static security analysis
   # ----------------------------------------------------------------------------
-  build:
-    name: Build
+  codeql:
+    name: CodeQL Analysis
     runs-on: ubuntu-latest
-    needs: [lint]
     permissions:
+      security-events: write
+      actions: read
       contents: read
-      packages: write
-
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v6
 
-      # Used for build-time metadata
-      - name: Get current date
-        id: date
-        run: echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
-
-      # Logic:
-      # - PRs get 'pr-{number}'
-      # - Main branch gets 'edge'
-      - name: Determine version
-        id: version
-        run: |
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "version=pr-${{ github.event.number }}" >> $GITHUB_OUTPUT
-          else
-            echo "version=edge" >> $GITHUB_OUTPUT
-          fi
-
-      # Required for multi-arch builds (amd64/arm64)
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      # Required for building multi-platform images
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      # Authenticate with GHCR to push images
-      - name: Log in to Container Registry
-        uses: docker/login-action@v3
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
         with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          languages: go
+          queries: security-extended,security-and-quality
 
-      # Generates tags:
-      # - pr-{number} for Pull Requests
-      # - edge for pushes to main
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=pr
-            type=raw,value=edge,enable=${{ github.ref_name == 'main' }}
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v4
 
-      # Builds the image for multiple platforms and pushes to GHCR
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v6
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
         with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          # Inject version info into the Go binary via build args
-          build-args: |
-            VERSION=${{ steps.version.outputs.version }}
-            COMMIT=${{ github.sha }}
-            DATE=${{ steps.date.outputs.date }}
+          category: "/language:go"
+
+  # ----------------------------------------------------------------------------
+  # Trivy: Container image vulnerability scanning
+  # ----------------------------------------------------------------------------
+  trivy:
+    name: Trivy Image Scan
+    runs-on: ubuntu-latest
+    needs: [tests, lint, codeql]
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set image name
+        id: image
+        run: echo "name=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+
+      - name: Build Docker Image
+        run: docker build -t ${{ steps.image.outputs.name }}:scan .
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "${{ steps.image.outputs.name }}:scan"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          ignore-unfixed: true
+          vuln-type: "os,library"
+          severity: "CRITICAL,HIGH"
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: "trivy-results.sarif"
+          category: "trivy-container-ci"

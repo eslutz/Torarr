@@ -1,54 +1,164 @@
-# Torarr - Copilot Instructions
+# Torarr AI Coding Guidelines
 
 ## Project Overview
 
-Torarr is a lightweight Tor proxy container with comprehensive health monitoring, designed as a sidecar for the \*arr stack (Sonarr, Radarr, etc.).
+Torarr is a production-ready Tor SOCKS proxy container with a Go health/metrics sidecar designed for the \*arr stack (Sonarr, Radarr, Prowlarr). The architecture consists of two processes running in a single container:
 
-## Architecture
+1. **Tor daemon** - Main process providing SOCKS5 proxy on port 9050
+2. **Health server** (Go) - HTTP sidecar on port 8085 providing health checks, circuit renewal, and Prometheus metrics
 
-- **Language**: Go (zero external dependencies for HTTP routing)
-- **Container**: Alpine-based (~25MB total)
-- **Health Server**: HTTP endpoints on port 8080
-- **Tor Control**: Direct socket communication on port 9051
-- **SOCKS Proxy**: Port 9050
+**Key Design Philosophy**: The entrypoint script generates/hashes the Tor control password, configures torrc dynamically, then starts the health server in background and Tor as the main process.
 
-## Code Style Guidelines
+## Architecture & Data Flow
 
-- Use stdlib `net/http` - no external routing libraries
-- Keep dependencies minimal
-- Prefer direct socket communication over libraries
-- Error handling: explicit returns, no panics in production code
-- Configuration: environment variables with sensible defaults
-- Logging: structured, leveled (INFO, WARN, ERROR)
+```
+User Request → Tor (SOCKS :9050) → Internet
+                 ↕ control port :9051
+          Health Server (HTTP :8085) ← Health Checks / Metrics Scraping
+```
 
-## Key Components
+- **Health server communicates with Tor** via control port protocol (see `internal/tor/control.go`)
+- **External readiness checks** route through SOCKS proxy to verify Tor egress (`internal/health/external.go`)
+- **Metrics collection** queries Tor via control port for bootstrap, circuit, and traffic stats
 
-1. **Tor Control Client** (`internal/tor/control.go`): Raw socket implementation of Tor control protocol
-2. **Health Handlers** (`internal/health/handlers.go`): HTTP endpoints with different health check levels
-3. **External Verification** (`internal/health/external.go`): Multi-fallback external IP verification with caching
-4. **Config** (`internal/config/config.go`): Centralized environment variable handling
+## Code Organization
 
-## Health Check Strategy
+```
+cmd/healthserver/          # Main entry point for health server
+internal/
+  config/                  # Environment-based configuration (no files)
+  health/
+    handlers.go            # HTTP endpoint handlers
+    external.go            # External Tor egress verification via SOCKS
+    metrics.go             # Prometheus metrics setup and observation
+  tor/
+    control.go             # Tor control port protocol client
+pkg/version/               # Build-time version injection
+```
 
-- `/ping`: Instant liveness check (no Tor dependencies)
-- `/health`: Fast readiness check (Tor control port + bootstrap status)
-- `/health/external`: External connectivity verification (one-off use only)
-- `/status`: Detailed Tor state JSON
+## Critical Patterns
 
-## Container Design
+### Configuration Loading (`internal/config/config.go`)
 
-- Multi-stage build (build in golang:1.25-alpine, run in alpine:3.23)
-- Single entrypoint script manages both processes
-- Graceful shutdown with signal handling
-- Persistent volume for `/var/lib/tor` (consensus cache)
+- **All config via environment variables** - No config files, defaults in code
+- Use `getEnv()` helper with defaults, `getEnvAsInt()` for numeric values
+- Comma-separated string parsing for `HEALTH_EXTERNAL_ENDPOINTS`
+- Example: `TOR_CONTROL_ADDRESS` defaults to `127.0.0.1:9051`
 
-## Testing Approach
+### Tor Control Protocol (`internal/tor/control.go`)
 
-- Unit tests for control protocol parsing
-- Integration tests assume Tor is running
-- Health endpoint tests can mock external calls
-- Docker builds tested in CI/CD
+- Custom protocol client, not using external libraries
+- **Thread-safe** with `sync.Mutex` protecting connection state
+- Command format: `"GETINFO key\r\n"`, responses start with status codes (250 = success)
+- Parse multi-line responses with `650+` prefix, terminated by `650 OK`
+- Extract numeric values from `key=value` pairs (bootstrap, circuits, traffic)
 
-## Environment Variables
+### Testing Strategy
 
-All configurable via environment variables with defaults. See `internal/config/config.go` for canonical list.
+- **Table-driven tests** for parsers (see `control_test.go`, `external_test.go`)
+- **Test all error paths** - invalid formats, missing fields, type conversion failures
+- **Mock-free unit tests** where possible - test pure functions with sample data
+- **HTTP handler tests** use `httptest.ResponseRecorder` (see `handlers_test.go`)
+
+### Error Handling
+
+- Wrap errors with context: `fmt.Errorf("operation failed: %w", err)`
+- HTTP handlers: log errors with `slog.Error()`, return structured JSON with status codes
+- Graceful degradation: metrics set to 0 on Tor unavailability
+
+### Logging
+
+- **Structured JSON logging** via `log/slog` (default handler set in `main.go`)
+- Use `slog.Info/Warn/Error` with key-value pairs: `slog.Error("msg", "key", value)`
+- Log level controlled by `LOG_LEVEL` env var (INFO default)
+
+### Metrics (`internal/health/metrics.go`)
+
+- Use `prometheus/client_golang` with `promauto` for automatic registration
+- Namespace all metrics with `torarr_` prefix
+- Version info exposed via `torarr_info` gauge with build labels (see `pkg/version/version.go`)
+- Observe patterns: increment counters, set gauges, time histograms in middleware
+
+## Build & Release
+
+### Version Injection
+
+Build args set version info at compile time:
+
+```bash
+go build -ldflags="-X github.com/eslutz/torarr/pkg/version.Version=${VERSION} ..."
+```
+
+Access via `version.Version`, `version.Commit`, `version.Date`
+
+### Release Process
+
+1. Update `VERSION` file in root (e.g., `0.2.0`)
+2. Merge to `main` branch
+3. CI reads `VERSION`, creates git tag (e.g., `v0.2.0`), builds multi-arch image, publishes to ghcr.io
+4. **No manual tagging** - fully automated via `.github/workflows/release.yml`
+
+### Local Development
+
+```bash
+# Run tests
+go test ./...
+
+# Run with coverage
+go test -coverprofile=coverage.out ./...
+go tool cover -html=coverage.out
+
+# Build binary
+go build -o healthserver ./cmd/healthserver
+
+# Build Docker image
+docker build -t torarr:local .
+```
+
+## HTTP Endpoints Semantics
+
+- **`/ping`** - Simple liveness (always 200 if process alive)
+- **`/health`** - Tor bootstrap readiness (200 only if bootstrap=100%)
+- **`/ready`** - Full egress verification through SOCKS proxy (makes external HTTP calls)
+- **`/status`** - Diagnostics snapshot (JSON with all Tor info)
+- **`/metrics`** - Prometheus scrape target (OpenMetrics format)
+- **`POST /renew`** - Circuit renewal via `SIGNAL NEWNYM`
+
+**Kubernetes probes**: Use `/ping` for liveness, `/health` for readiness (or `/ready` if external verification needed)
+
+## Common Tasks
+
+### Adding a New Config Variable
+
+1. Add to `Config` struct in `internal/config/config.go`
+2. Load in `Load()` function with `getEnv()` or `getEnvAsInt()`
+3. Document in README.md configuration table
+4. Add test case in `config_test.go`
+
+### Adding a New Metric
+
+1. Define in `internal/health/metrics.go` with `promauto.NewCounter/Gauge/Histogram`
+2. Observe in appropriate handler or `observeTorStatus()`
+3. Document in README.md metrics table
+4. Consider adding to Grafana dashboard JSON
+
+### Adding a New Endpoint
+
+1. Add handler method to `Handler` in `internal/health/handlers.go`
+2. Register in `SetupRoutes()` with `instrument()` middleware
+3. Add tests in `handlers_test.go`
+4. Document in README.md endpoints table
+
+## Dependencies
+
+- **Minimal external deps**: Only `prometheus/client_golang` for metrics
+- **No Tor library** - custom control protocol implementation
+- **Alpine base** for runtime image (Tor from apk)
+- Go 1.25+ required
+
+## Security Considerations
+
+- Tor control password auto-generated if unset (in `entrypoint.sh`)
+- Container runs as non-root `tor` user (UID 1000)
+- SOCKS proxy should bind to localhost or private network only
+- Control port not exposed outside container

@@ -22,7 +22,11 @@ func main() {
 	cfg := config.Load()
 
 	handler := health.NewHandler(cfg)
-	defer handler.Close()
+	defer func() {
+		if err := handler.Close(); err != nil {
+			slog.Error("Failed to close handler", "error", err)
+		}
+	}()
 
 	mux := http.NewServeMux()
 	handler.SetupRoutes(mux)
