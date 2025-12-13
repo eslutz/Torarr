@@ -59,12 +59,12 @@ All application configuration is done via environment variables. An example file
 │                         Torarr                             │
 ├────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐      control port      ┌───────────────┐ │
-│  │     Tor      │◄──────────────────────►│  Healthserver  │ │
-│  │ SOCKS :9050  │        :9051           │ HTTP :8085     │ │
+│  │     Tor      │◄──────────────────────►│  Healthserver │ │
+│  │ SOCKS :9050  │        :9051           │  HTTP :8085   │ │
 │  └──────┬───────┘                        └───────────────┘ │
-│         │                                                   │
-│         ▼                                                   │
-│   /var/lib/tor  (mount as volume for faster restarts)       │
+│         │                                                  │
+│         ▼                                                  │
+│   /var/lib/tor  (mount as volume for faster restarts)      │
 └────────────────────────────────────────────────────────────┘
 ```
 
