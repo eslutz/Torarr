@@ -84,7 +84,7 @@ jobs:
             mv temp.out coverage-filtered.out
           fi
 
-      - name: Enforce coverage >= 60% (excluding main and tor connection code)
+      - name: Enforce coverage >= 60%
         run: |
           echo ""
           echo "======================================="

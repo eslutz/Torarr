@@ -39,7 +39,7 @@ docker run -d \
 
 ## Configuration
 
-All application configuration is done via environment variables. An example file is available at [docs/.env.example](docs/.env.example).
+All application configuration is done via environment variables. Use the table below to set values in your deployment or compose file. A sample file is available at [docs/.env.example](docs/.env.example).
 
 | Variable | Default | Description |
 |----------|---------|-------------|
