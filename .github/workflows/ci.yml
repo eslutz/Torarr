@@ -76,7 +76,7 @@ jobs:
           # Remove excluded files from coverage profile
           grep -v "cmd/healthserver/main.go" coverage.out | \
           grep -v "internal/tor/control.go" > coverage-filtered.out || true
-          
+
           # Ensure header is present
           if ! head -n 1 coverage-filtered.out | grep -q "^mode:"; then
             head -n 1 coverage.out > temp.out
@@ -93,25 +93,16 @@ jobs:
           echo "  - internal/tor/control.go"
           echo "======================================="
           go tool cover -func=coverage-filtered.out | awk '
-            /^total:/ { 
-              sub(/%/, "", $3); 
+            /^total:/ {
+              sub(/%/, "", $3);
               printf "Coverage: %.1f%%\n\n", $3
-              if ($3 < 60.0) { 
+              if ($3 < 60.0) {
                 printf "❌ Coverage below 60%% target: %.1f%%\n", $3
-                exit 1 
+                exit 1
               }
               printf "✓ Coverage meets 60%% requirement (%.1f%%)\n", $3
             }
           '
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
-        with:
-          files: ./coverage.out
-          flags: unittests
-          name: codecov-torarr
-          fail_ci_if_error: true
-          verbose: true
 
   # ----------------------------------------------------------------------------
   # Lint: Code quality checks
