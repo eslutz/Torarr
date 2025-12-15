@@ -69,7 +69,6 @@ jobs:
           format: "sarif"
           output: "trivy-results.sarif"
           ignore-unfixed: true
-          vuln-type: "os,library"
           severity: "CRITICAL,HIGH"
 
       - name: Upload Trivy results to GitHub Security tab
