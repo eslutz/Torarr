@@ -1,6 +1,6 @@
 # ==============================================================================
 # Security Pipeline
-# Runs container image vulnerability scanning.
+# Comprehensive security scanning run on a weekly schedule.
 # ==============================================================================
 
 name: Security
@@ -9,10 +9,6 @@ name: Security
 # Triggers
 # ------------------------------------------------------------------------------
 on:
-  push:
-    branches: ["main"]
-  pull_request:
-    branches: ["main"]
   schedule:
     - cron: "30 1 * * 0" # Weekly on Sunday at 01:30 UTC
 
