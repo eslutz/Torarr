@@ -21,6 +21,7 @@ type Handler struct {
 	metrics          *metrics
 	webhook          *notify.Webhook
 	webhookEvents    []string
+	previousHealthy  *bool // Tracks previous health state for change detection
 }
 
 func NewHandler(cfg *config.Config) *Handler {
@@ -68,6 +69,15 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		if h.metrics != nil {
 			h.metrics.torReady.Set(0)
 		}
+
+		// Check for health state change
+		h.checkHealthStateChange(false)
+
+		// Send EventBootstrapFailed webhook
+		h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap failed", notify.Details{
+			Error: err.Error(),
+		})
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "NOT_READY",
@@ -82,6 +92,16 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		if h.metrics != nil {
 			h.metrics.observeTorStatus(status)
 		}
+
+		// Check for health state change
+		h.checkHealthStateChange(false)
+
+		// Send EventBootstrapFailed webhook
+		h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap incomplete", notify.Details{
+			Bootstrap: &status.BootstrapPhase,
+			Circuits:  status.NumCircuits,
+		})
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "NOT_READY",
@@ -95,6 +115,9 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	if h.metrics != nil {
 		h.metrics.observeTorStatus(status)
 	}
+
+	// Check for health state change to healthy
+	h.checkHealthStateChange(true)
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -177,8 +200,17 @@ func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build details for webhook notification using current Tor status, if available
+	details := notify.Details{}
+	if status, err := h.torClient.GetStatus(); err != nil {
+		slog.Warn("Failed to get Tor status after NEWNYM", "error", err)
+	} else {
+		details.Circuits = status.NumCircuits
+		details.Healthy = status.CircuitEstablished
+	}
+
 	// Send webhook notification if configured
-	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewed successfully", notify.Details{})
+	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewed successfully", details)
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"}); err != nil {
@@ -273,4 +305,30 @@ func (h *Handler) sendWebhook(event notify.Event, message string, details notify
 			)
 		}
 	}()
+}
+
+// checkHealthStateChange detects health state transitions and sends EventHealthChanged webhook
+func (h *Handler) checkHealthStateChange(currentlyHealthy bool) {
+	if h.previousHealthy == nil {
+		// First call - initialize state
+		h.previousHealthy = &currentlyHealthy
+		return
+	}
+
+	// Check if state has changed
+	if *h.previousHealthy != currentlyHealthy {
+		var message string
+		if currentlyHealthy {
+			message = "Tor health status changed to healthy"
+		} else {
+			message = "Tor health status changed to unhealthy"
+		}
+
+		h.sendWebhook(notify.EventHealthChanged, message, notify.Details{
+			Healthy: currentlyHealthy,
+		})
+
+		// Update previous state
+		*h.previousHealthy = currentlyHealthy
+	}
 }

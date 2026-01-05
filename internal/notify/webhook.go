@@ -33,7 +33,7 @@ type Payload struct {
 
 // Details contains event-specific data
 type Details struct {
-	Bootstrap int    `json:"bootstrap,omitempty"`
+	Bootstrap *int   `json:"bootstrap,omitempty"`
 	Circuits  int    `json:"circuits,omitempty"`
 	Healthy   bool   `json:"healthy,omitempty"`
 	Error     string `json:"error,omitempty"`
@@ -97,7 +97,7 @@ func (w *Webhook) Send(ctx context.Context, payload Payload) error {
 	if err != nil {
 		return fmt.Errorf("sending request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(resp.Body)
@@ -254,10 +254,10 @@ func (w *Webhook) getPriority(event Event) int {
 func (w *Webhook) buildFields(details Details) []map[string]interface{} {
 	fields := []map[string]interface{}{}
 
-	if details.Bootstrap > 0 {
+	if details.Bootstrap != nil {
 		fields = append(fields, map[string]interface{}{
 			"name":   "Bootstrap",
-			"value":  fmt.Sprintf("%d%%", details.Bootstrap),
+			"value":  fmt.Sprintf("%d%%", *details.Bootstrap),
 			"inline": true,
 		})
 	}
@@ -285,10 +285,10 @@ func (w *Webhook) buildFields(details Details) []map[string]interface{} {
 func (w *Webhook) buildSlackFields(details Details) []map[string]interface{} {
 	fields := []map[string]interface{}{}
 
-	if details.Bootstrap > 0 {
+	if details.Bootstrap != nil {
 		fields = append(fields, map[string]interface{}{
 			"title": "Bootstrap",
-			"value": fmt.Sprintf("%d%%", details.Bootstrap),
+			"value": fmt.Sprintf("%d%%", *details.Bootstrap),
 			"short": true,
 		})
 	}

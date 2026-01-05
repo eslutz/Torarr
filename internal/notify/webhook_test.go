@@ -77,11 +77,12 @@ func TestWebhook_Send_Success(t *testing.T) {
 
 			webhook := NewWebhook(server.URL, tt.template, 10*time.Second)
 
+			bootstrap := 100
 			payload := Payload{
 				Event:   EventCircuitRenewed,
 				Message: "Circuit renewed successfully",
 				Details: Details{
-					Bootstrap: 100,
+					Bootstrap: &bootstrap,
 					Circuits:  3,
 				},
 			}
@@ -97,7 +98,7 @@ func TestWebhook_Send_Success(t *testing.T) {
 func TestWebhook_Send_HTTPError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("Internal Server Error"))
+		_, _ = w.Write([]byte("Internal Server Error"))
 	}))
 	defer server.Close()
 
@@ -137,11 +138,12 @@ func TestWebhook_Send_Timeout(t *testing.T) {
 func TestWebhook_FormatDiscord(t *testing.T) {
 	webhook := NewWebhook("https://example.com", TemplateDiscord, 10*time.Second)
 
+	bootstrap := 100
 	payload := Payload{
 		Event:   EventCircuitRenewed,
 		Message: "Test message",
 		Details: Details{
-			Bootstrap: 100,
+			Bootstrap: &bootstrap,
 			Circuits:  5,
 		},
 		Version: "1.0.0",
@@ -186,11 +188,12 @@ func TestWebhook_FormatDiscord(t *testing.T) {
 func TestWebhook_FormatSlack(t *testing.T) {
 	webhook := NewWebhook("https://example.com", TemplateSlack, 10*time.Second)
 
+	bootstrap := 75
 	payload := Payload{
 		Event:   EventBootstrapFailed,
 		Message: "Bootstrap failed",
 		Details: Details{
-			Bootstrap: 75,
+			Bootstrap: &bootstrap,
 			Error:     "Connection timeout",
 		},
 		Version: "1.0.0",
@@ -266,11 +269,12 @@ func TestWebhook_FormatGotify(t *testing.T) {
 func TestWebhook_FormatJSON(t *testing.T) {
 	webhook := NewWebhook("https://example.com", TemplateJSON, 10*time.Second)
 
+	bootstrap := 100
 	payload := Payload{
 		Event:   EventCircuitRenewed,
 		Message: "Test message",
 		Details: Details{
-			Bootstrap: 100,
+			Bootstrap: &bootstrap,
 			Circuits:  3,
 		},
 		Version: "1.0.0",
@@ -297,8 +301,12 @@ func TestWebhook_FormatJSON(t *testing.T) {
 	if result.Message != "Test message" {
 		t.Errorf("Expected message 'Test message', got %s", result.Message)
 	}
-	if result.Details.Bootstrap != 100 {
-		t.Errorf("Expected bootstrap 100, got %d", result.Details.Bootstrap)
+	if result.Details.Bootstrap == nil || *result.Details.Bootstrap != 100 {
+		if result.Details.Bootstrap == nil {
+			t.Error("Expected bootstrap 100, got nil")
+		} else {
+			t.Errorf("Expected bootstrap 100, got %d", *result.Details.Bootstrap)
+		}
 	}
 	if result.Details.Circuits != 3 {
 		t.Errorf("Expected circuits 3, got %d", result.Details.Circuits)
@@ -377,6 +385,8 @@ func TestWebhook_GetPriority(t *testing.T) {
 func TestWebhook_BuildFields(t *testing.T) {
 	webhook := NewWebhook("", TemplateDiscord, 10*time.Second)
 
+	bootstrap100 := 100
+	bootstrap75 := 75
 	tests := []struct {
 		name    string
 		details Details
@@ -384,12 +394,12 @@ func TestWebhook_BuildFields(t *testing.T) {
 	}{
 		{
 			name:    "All fields",
-			details: Details{Bootstrap: 100, Circuits: 5, Error: "test error"},
+			details: Details{Bootstrap: &bootstrap100, Circuits: 5, Error: "test error"},
 			want:    3,
 		},
 		{
 			name:    "Bootstrap and Circuits only",
-			details: Details{Bootstrap: 75, Circuits: 3},
+			details: Details{Bootstrap: &bootstrap75, Circuits: 3},
 			want:    2,
 		},
 		{
@@ -417,8 +427,9 @@ func TestWebhook_BuildFields(t *testing.T) {
 func TestWebhook_BuildSlackFields(t *testing.T) {
 	webhook := NewWebhook("", TemplateSlack, 10*time.Second)
 
+	bootstrap := 100
 	details := Details{
-		Bootstrap: 100,
+		Bootstrap: &bootstrap,
 		Circuits:  5,
 		Error:     "test error",
 	}
