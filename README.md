@@ -53,7 +53,7 @@ All application configuration is done via environment variables. Use the table b
 | `TOR_EXIT_NODES` | *(none)* | Optional exit node selector (e.g. `{us},{ca}`) |
 | `WEBHOOK_URL` | *(none)* | Webhook endpoint URL for notifications (e.g., Discord, Slack) |
 | `WEBHOOK_TEMPLATE` | `discord` | Webhook template format: `discord`, `slack`, `gotify`, or `json` |
-| `WEBHOOK_EVENTS` | `circuit_renewed` | Comma-separated events to notify: `circuit_renewed`, `bootstrap_failed`, `health_changed` |
+| `WEBHOOK_EVENTS` | `circuit_renewed,bootstrap_failed,health_changed` | Comma-separated events to notify: `circuit_renewed`, `bootstrap_failed`, `health_changed` |
 | `WEBHOOK_TIMEOUT` | `10s` | Timeout for webhook requests (supports Go duration format) |
 
 ## Architecture

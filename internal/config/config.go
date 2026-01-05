@@ -41,6 +41,34 @@ func Load() *Config {
 
 	if len(cfg.WebhookEvents) == 0 {
 		cfg.WebhookEvents = defaultWebhookEvents()
+	} else {
+		// Validate webhook events against allowed set
+		validEvents := map[string]struct{}{
+			"circuit_renewed":  {},
+			"bootstrap_failed": {},
+			"health_changed":   {},
+		}
+		filteredEvents := make([]string, 0, len(cfg.WebhookEvents))
+		for _, evt := range cfg.WebhookEvents {
+			if _, ok := validEvents[evt]; ok {
+				filteredEvents = append(filteredEvents, evt)
+			} else {
+				slog.Warn("Invalid webhook event configured; ignoring",
+					"event", evt,
+					"valid_options", []string{"circuit_renewed", "bootstrap_failed", "health_changed"},
+				)
+			}
+		}
+		if len(filteredEvents) == 0 {
+			if len(cfg.WebhookEvents) > 0 {
+				slog.Warn("All configured webhook events were invalid; falling back to defaults",
+					"valid_options", []string{"circuit_renewed", "bootstrap_failed", "health_changed"},
+				)
+			}
+			cfg.WebhookEvents = defaultWebhookEvents()
+		} else {
+			cfg.WebhookEvents = filteredEvents
+		}
 	}
 
 	// Validate and set webhook template only when webhook URL is configured
