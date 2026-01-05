@@ -42,7 +42,7 @@ docker run -d \
 All application configuration is done via environment variables. Use the table below to set values in your deployment or compose file. A sample file is available at [docs/.env.example](docs/.env.example).
 
 | Variable | Default | Description |
-|----------|---------|-------------|
+| --- | --- | --- |
 | `TZ` | `UTC` | Container timezone |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARN, ERROR) |
 | `HEALTH_PORT` | `8085` | HTTP server port for health/metrics |
@@ -51,6 +51,10 @@ All application configuration is done via environment variables. Use the table b
 | `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address for the health server |
 | `TOR_CONTROL_PASSWORD` | *(auto-generated)* | Tor control password used by the health server; generated at startup if unset |
 | `TOR_EXIT_NODES` | *(none)* | Optional exit node selector (e.g. `{us},{ca}`) |
+| `WEBHOOK_URL` | *(none)* | Webhook endpoint URL for notifications (e.g., Discord, Slack) |
+| `WEBHOOK_TEMPLATE` | `discord` | Webhook template format: `discord`, `slack`, `gotify`, or `json` |
+| `WEBHOOK_EVENTS` | `circuit_renewed` | Comma-separated events to notify: `circuit_renewed`, `bootstrap_failed`, `health_changed` |
+| `WEBHOOK_TIMEOUT` | `10s` | Timeout for webhook requests (supports Go duration format) |
 
 ## Architecture
 
@@ -84,7 +88,7 @@ If you want to customize Tor settings, mount your own `torrc` **as writable** (t
 ## HTTP Endpoints
 
 | Endpoint | Purpose | Response |
-|----------|---------|----------|
+| --- | --- | --- |
 | `GET /ping` | Liveness probe | `200 OK` if running |
 | `GET /health` | Tor bootstrap readiness | `200 OK` when bootstrap is 100% |
 | `GET /ready` | Tor egress verification | `200 OK` if external check succeeds and `IsTor=true` |
@@ -103,7 +107,7 @@ If you want to customize Tor settings, mount your own `torrc` **as writable** (t
 ## Prometheus Metrics
 
 | Metric | Type | Description |
-|--------|------|-------------|
+| --- | --- | --- |
 | `torarr_info` | Gauge | Build information (version, commit, date, go_version) |
 | `torarr_http_requests_total` | Counter | Total HTTP requests (labels: path, method, code) |
 | `torarr_http_request_duration_seconds` | Histogram | HTTP request durations (labels: path, method, code) |
@@ -113,10 +117,51 @@ If you want to customize Tor settings, mount your own `torrc` **as writable** (t
 | `torarr_tor_bytes_read` | Gauge | Bytes read (Tor traffic stats) |
 | `torarr_tor_bytes_written` | Gauge | Bytes written (Tor traffic stats) |
 | `torarr_external_check_total` | Counter | External check attempts (labels: endpoint, success, is_tor) |
+| `torarr_webhook_requests_total` | Counter | Webhook notification attempts (labels: event, status) |
+| `torarr_webhook_duration_seconds` | Histogram | Webhook notification duration (labels: event) |
 
 ## Grafana Dashboard
 
 Import [docs/torarr-grafana-dashboard.json](docs/torarr-grafana-dashboard.json) into Grafana.
+
+## Webhook Notifications
+
+Torarr can send webhook notifications for various events. Configure webhooks using the environment variables listed in the Configuration section.
+
+### Supported Templates
+
+- **Discord**: Rich embeds with color-coded events
+- **Slack**: Attachments with formatted fields
+- **Gotify**: Priority-based notifications
+- **JSON**: Plain JSON payloads for custom integrations
+
+### Events
+
+| Event | Description |
+| --- | --- |
+| `circuit_renewed` | Triggered when `POST /renew` successfully sends NEWNYM |
+| `bootstrap_failed` | Tor bootstrap failed to reach 100% |
+| `health_changed` | Health status changed |
+
+### Example: Discord Webhook
+
+```bash
+docker run -d \
+  --name torarr \
+  -p 127.0.0.1:9050:9050 \
+  -p 127.0.0.1:8085:8085 \
+  -e WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID \
+  -e WEBHOOK_TEMPLATE=discord \
+  -e WEBHOOK_EVENTS=circuit_renewed,bootstrap_failed \
+  ghcr.io/eslutz/torarr:latest
+```
+
+### Example: Slack Webhook
+
+```bash
+-e WEBHOOK_URL=https://hooks.slack.com/services/YOUR_WEBHOOK_PATH \
+-e WEBHOOK_TEMPLATE=slack
+```
 
 ## Releases
 

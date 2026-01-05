@@ -1,12 +1,15 @@
 package health
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
 	"time"
 
 	"github.com/eslutz/torarr/internal/config"
+	"github.com/eslutz/torarr/internal/notify"
 	"github.com/eslutz/torarr/internal/tor"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -16,6 +19,8 @@ type Handler struct {
 	readinessChecker *ExternalChecker
 	config           *config.Config
 	metrics          *metrics
+	webhook          *notify.Webhook
+	webhookEvents    []string
 }
 
 func NewHandler(cfg *config.Config) *Handler {
@@ -28,11 +33,20 @@ func NewHandler(cfg *config.Config) *Handler {
 		"socks5://127.0.0.1:9050",
 	)
 
+	// Initialize webhook if URL is configured
+	var webhook *notify.Webhook
+	if cfg.WebhookURL != "" {
+		template := notify.Template(cfg.WebhookTemplate)
+		webhook = notify.NewWebhook(cfg.WebhookURL, template, cfg.WebhookTimeout)
+	}
+
 	return &Handler{
 		torClient:        torClient,
 		readinessChecker: readinessChecker,
 		config:           cfg,
 		metrics:          metrics,
+		webhook:          webhook,
+		webhookEvents:    cfg.WebhookEvents,
 	}
 }
 
@@ -163,6 +177,9 @@ func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Send webhook notification if configured
+	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewed successfully", notify.Details{})
+
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"}); err != nil {
 		slog.Error("Failed to encode renew response", "error", err)
@@ -210,4 +227,50 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(statusCode int) {
 	r.status = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+// sendWebhook sends a webhook notification if enabled and the event is configured
+func (h *Handler) sendWebhook(event notify.Event, message string, details notify.Details) {
+	if h.webhook == nil {
+		return
+	}
+
+	// Check if this event is enabled in configuration
+	if !slices.Contains(h.webhookEvents, string(event)) {
+		return
+	}
+
+	payload := notify.Payload{
+		Event:   event,
+		Message: message,
+		Details: details,
+	}
+
+	// Send webhook in background with timeout
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), h.config.WebhookTimeout)
+		defer cancel()
+
+		start := time.Now()
+		err := h.webhook.Send(ctx, payload)
+		duration := time.Since(start)
+
+		success := err == nil
+		if h.metrics != nil {
+			h.metrics.observeWebhook(string(event), success, duration)
+		}
+
+		if err != nil {
+			slog.Error("Webhook notification failed",
+				"event", event,
+				"error", err,
+				"duration", duration,
+			)
+		} else {
+			slog.Debug("Webhook notification sent",
+				"event", event,
+				"duration", duration,
+			)
+		}
+	}()
 }
