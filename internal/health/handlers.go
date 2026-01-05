@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/eslutz/torarr/internal/config"
@@ -21,7 +22,8 @@ type Handler struct {
 	metrics          *metrics
 	webhook          *notify.Webhook
 	webhookEvents    []string
-	previousHealthy  *bool // Tracks previous health state for change detection
+	previousHealthy  *bool      // Tracks previous health state for change detection
+	healthMu         sync.Mutex // Protects previousHealthy from concurrent access
 }
 
 func NewHandler(cfg *config.Config) *Handler {
@@ -70,13 +72,16 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 			h.metrics.torReady.Set(0)
 		}
 
-		// Check for health state change
-		h.checkHealthStateChange(false)
+		// Check for health state change first to avoid duplicate notifications
+		stateChanged := h.checkHealthStateChange(false)
 
-		// Send EventBootstrapFailed webhook
-		h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap failed", notify.Details{
-			Error: err.Error(),
-		})
+		// Send EventBootstrapFailed webhook only if state didn't change
+		// (EventHealthChanged already sent if state changed)
+		if !stateChanged {
+			h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap failed", notify.Details{
+				Error: err.Error(),
+			})
+		}
 
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
@@ -93,14 +98,17 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 			h.metrics.observeTorStatus(status)
 		}
 
-		// Check for health state change
-		h.checkHealthStateChange(false)
+		// Check for health state change first to avoid duplicate notifications
+		stateChanged := h.checkHealthStateChange(false)
 
-		// Send EventBootstrapFailed webhook
-		h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap incomplete", notify.Details{
-			Bootstrap: &status.BootstrapPhase,
-			Circuits:  status.NumCircuits,
-		})
+		// Send EventBootstrapFailed webhook only if state didn't change
+		// (EventHealthChanged already sent if state changed)
+		if !stateChanged {
+			h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap incomplete", notify.Details{
+				Bootstrap: &status.BootstrapPhase,
+				Circuits:  status.NumCircuits,
+			})
+		}
 
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
@@ -308,11 +316,15 @@ func (h *Handler) sendWebhook(event notify.Event, message string, details notify
 }
 
 // checkHealthStateChange detects health state transitions and sends EventHealthChanged webhook
-func (h *Handler) checkHealthStateChange(currentlyHealthy bool) {
+// Returns true if the state changed, false otherwise
+func (h *Handler) checkHealthStateChange(currentlyHealthy bool) bool {
+	h.healthMu.Lock()
+	defer h.healthMu.Unlock()
+
 	if h.previousHealthy == nil {
 		// First call - initialize state
 		h.previousHealthy = &currentlyHealthy
-		return
+		return false
 	}
 
 	// Check if state has changed
@@ -330,5 +342,8 @@ func (h *Handler) checkHealthStateChange(currentlyHealthy bool) {
 
 		// Update previous state
 		*h.previousHealthy = currentlyHealthy
+		return true
 	}
+
+	return false
 }

@@ -43,6 +43,25 @@ func Load() *Config {
 		cfg.WebhookEvents = defaultWebhookEvents()
 	}
 
+	// Validate webhook template
+	if cfg.WebhookURL != "" {
+		validTemplates := []string{"discord", "slack", "gotify", "json"}
+		isValid := false
+		for _, valid := range validTemplates {
+			if cfg.WebhookTemplate == valid {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			slog.Warn("Invalid webhook template, defaulting to JSON",
+				"template", cfg.WebhookTemplate,
+				"valid_options", validTemplates,
+			)
+			cfg.WebhookTemplate = "json"
+		}
+	}
+
 	return cfg
 }
 

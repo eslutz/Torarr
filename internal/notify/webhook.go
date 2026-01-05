@@ -35,7 +35,7 @@ type Payload struct {
 type Details struct {
 	Bootstrap *int   `json:"bootstrap,omitempty"`
 	Circuits  int    `json:"circuits,omitempty"`
-	Healthy   bool   `json:"healthy,omitempty"`
+	Healthy   bool   `json:"healthy"`
 	Error     string `json:"error,omitempty"`
 }
 
@@ -63,9 +63,7 @@ func NewWebhook(url string, template Template, timeout time.Duration) *Webhook {
 		url:      url,
 		template: template,
 		timeout:  timeout,
-		client: &http.Client{
-			Timeout: timeout,
-		},
+		client:   &http.Client{},
 	}
 }
 

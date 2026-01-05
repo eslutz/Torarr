@@ -129,7 +129,11 @@ func TestWebhook_Send_Timeout(t *testing.T) {
 		Message: "Test message",
 	}
 
-	err := webhook.Send(context.Background(), payload)
+	// Create context with timeout (this is how it's used in production)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	err := webhook.Send(ctx, payload)
 	if err == nil {
 		t.Error("Expected timeout error, got nil")
 	}
