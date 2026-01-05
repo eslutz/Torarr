@@ -140,7 +140,7 @@ Torarr can send webhook notifications for various events. Configure webhooks usi
 | Event | Description |
 | --- | --- |
 | `circuit_renewed` | Triggered when `POST /renew` successfully sends NEWNYM |
-| `bootstrap_failed` | Tor bootstrap failed to reach 100% |
+| `bootstrap_failed` | Tor bootstrap is below 100%; fired on each health check while unhealthy |
 | `health_changed` | Health status changed |
 
 ### Example: Discord Webhook

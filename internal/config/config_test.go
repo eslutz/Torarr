@@ -37,8 +37,9 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Errorf("expected WebhookURL to be empty, got '%s'", cfg.WebhookURL)
 	}
 
-	if cfg.WebhookTemplate != "discord" {
-		t.Errorf("expected WebhookTemplate to be 'discord', got '%s'", cfg.WebhookTemplate)
+	// WebhookTemplate should be empty when no webhook URL is configured
+	if cfg.WebhookTemplate != "" {
+		t.Errorf("expected WebhookTemplate to be empty when WebhookURL not set, got '%s'", cfg.WebhookTemplate)
 	}
 
 	if len(cfg.WebhookEvents) == 0 {

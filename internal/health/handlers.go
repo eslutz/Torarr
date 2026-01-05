@@ -218,7 +218,7 @@ func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send webhook notification if configured
-	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewed successfully", details)
+	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewal requested", details)
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"}); err != nil {

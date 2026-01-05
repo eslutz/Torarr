@@ -30,7 +30,7 @@ func Load() *Config {
 		HealthExternalEndpoints: parseEndpoints(getEnv("HEALTH_EXTERNAL_ENDPOINTS", "")),
 		LogLevel:                strings.ToUpper(getEnv("LOG_LEVEL", "INFO")),
 		WebhookURL:              getEnv("WEBHOOK_URL", ""),
-		WebhookTemplate:         strings.ToLower(getEnv("WEBHOOK_TEMPLATE", "discord")),
+		WebhookTemplate:         strings.ToLower(getEnv("WEBHOOK_TEMPLATE", "")),
 		WebhookEvents:           parseEndpoints(getEnv("WEBHOOK_EVENTS", "")),
 		WebhookTimeout:          getEnvAsDuration("WEBHOOK_TIMEOUT", 10*time.Second),
 	}
@@ -43,8 +43,11 @@ func Load() *Config {
 		cfg.WebhookEvents = defaultWebhookEvents()
 	}
 
-	// Validate webhook template
+	// Validate and set webhook template only when webhook URL is configured
 	if cfg.WebhookURL != "" {
+		if cfg.WebhookTemplate == "" {
+			cfg.WebhookTemplate = "discord" // Default to discord if not specified
+		}
 		validTemplates := []string{"discord", "slack", "gotify", "json"}
 		isValid := false
 		for _, valid := range validTemplates {

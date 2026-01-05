@@ -63,7 +63,9 @@ func NewWebhook(url string, template Template, timeout time.Duration) *Webhook {
 		url:      url,
 		template: template,
 		timeout:  timeout,
-		client:   &http.Client{},
+		client: &http.Client{
+			Timeout: timeout,
+		},
 	}
 }
 
