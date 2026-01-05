@@ -57,7 +57,7 @@ func Load() *Config {
 			}
 		}
 		if !isValid {
-			slog.Warn("Invalid webhook template, defaulting to JSON",
+			slog.Error("Invalid webhook template, defaulting to JSON",
 				"template", cfg.WebhookTemplate,
 				"valid_options", validTemplates,
 			)
@@ -139,5 +139,7 @@ func defaultExternalEndpoints() []string {
 func defaultWebhookEvents() []string {
 	return []string{
 		"circuit_renewed",
+		"bootstrap_failed",
+		"health_changed",
 	}
 }

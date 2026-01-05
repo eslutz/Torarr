@@ -75,10 +75,12 @@ func (w *Webhook) Send(ctx context.Context, payload Payload) error {
 		return nil // No webhook configured
 	}
 
-	// Add version info
+	// Add version info and timestamp if not already set
+	if payload.Timestamp.IsZero() {
+		payload.Timestamp = time.Now()
+	}
 	payload.Version = version.Version
 	payload.Commit = version.Commit
-	payload.Timestamp = time.Now()
 
 	body, contentType, err := w.formatPayload(payload)
 	if err != nil {
@@ -100,7 +102,8 @@ func (w *Webhook) Send(ctx context.Context, payload Payload) error {
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
+		// Limit response body to 1MB to prevent memory exhaustion
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		return fmt.Errorf("webhook returned status %d: %s", resp.StatusCode, string(body))
 	}
 

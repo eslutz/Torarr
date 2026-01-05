@@ -37,7 +37,8 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Errorf("expected WebhookURL to be empty, got '%s'", cfg.WebhookURL)
 	}
 
-	// WebhookTemplate should be empty when no webhook URL is configured
+	// In the default config (no WebhookURL set), WebhookTemplate should remain empty.
+	// A default template is only applied when a WebhookURL is configured.
 	if cfg.WebhookTemplate != "" {
 		t.Errorf("expected WebhookTemplate to be empty when WebhookURL not set, got '%s'", cfg.WebhookTemplate)
 	}

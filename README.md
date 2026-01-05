@@ -140,8 +140,14 @@ Torarr can send webhook notifications for various events. Configure webhooks usi
 | Event | Description |
 | --- | --- |
 | `circuit_renewed` | Triggered when `POST /renew` successfully sends NEWNYM |
-| `bootstrap_failed` | Tor bootstrap is below 100%; fired on each health check while unhealthy |
-| `health_changed` | Health status changed |
+| `bootstrap_failed` | Tor bootstrap is below 100%; fired on **every** `/health` check while unhealthy (can be very frequent) |
+| `health_changed` | Health status changed (state transition only) |
+
+> **Note:** `bootstrap_failed` is evaluated on each health check. In environments like Kubernetes where probes may run every few seconds, this can generate many webhook calls during bootstrap or outages. Consider:
+>
+> - Using `health_changed` for primary alerting on state transitions
+> - Enabling `bootstrap_failed` only when per-check visibility is required
+> - Implementing rate limiting / deduplication on the webhook receiver to avoid notification spam
 
 ### Example: Discord Webhook
 

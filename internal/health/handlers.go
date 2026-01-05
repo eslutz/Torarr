@@ -209,16 +209,18 @@ func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build details for webhook notification using current Tor status, if available
-	details := notify.Details{}
 	if status, err := h.torClient.GetStatus(); err != nil {
-		slog.Warn("Failed to get Tor status after NEWNYM", "error", err)
+		// If we can't retrieve status, skip sending a potentially misleading webhook
+		slog.Warn("Failed to get Tor status after NEWNYM; skipping circuit renewal webhook", "error", err)
 	} else {
-		details.Circuits = status.NumCircuits
-		details.Healthy = status.CircuitEstablished
-	}
+		details := notify.Details{
+			Circuits: status.NumCircuits,
+			Healthy:  status.CircuitEstablished,
+		}
 
-	// Send webhook notification if configured
-	h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewal requested", details)
+		// Send webhook notification if configured
+		h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewal requested", details)
+	}
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"}); err != nil {
@@ -288,6 +290,16 @@ func (h *Handler) sendWebhook(event notify.Event, message string, details notify
 
 	// Send webhook in background with timeout
 	go func() {
+		// Recover from panics to prevent crashing the application
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Webhook goroutine panicked",
+					"event", event,
+					"panic", r,
+				)
+			}
+		}()
+
 		ctx, cancel := context.WithTimeout(context.Background(), h.config.WebhookTimeout)
 		defer cancel()
 
