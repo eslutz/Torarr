@@ -283,9 +283,10 @@ func (h *Handler) sendWebhook(event notify.Event, message string, details notify
 	}
 
 	payload := notify.Payload{
-		Event:   event,
-		Message: message,
-		Details: details,
+		Event:     event,
+		Message:   message,
+		Details:   details,
+		Timestamp: time.Now(), // Set timestamp at event occurrence, not at send time
 	}
 
 	// Send webhook in background with timeout
