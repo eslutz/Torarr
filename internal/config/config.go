@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Config struct {
@@ -14,6 +15,10 @@ type Config struct {
 	HealthExternalTimeout   int
 	HealthExternalEndpoints []string
 	LogLevel                string
+	WebhookURL              string
+	WebhookTemplate         string
+	WebhookEvents           []string
+	WebhookTimeout          time.Duration
 }
 
 func Load() *Config {
@@ -24,10 +29,68 @@ func Load() *Config {
 		HealthExternalTimeout:   getEnvAsInt("HEALTH_EXTERNAL_TIMEOUT", 15),
 		HealthExternalEndpoints: parseEndpoints(getEnv("HEALTH_EXTERNAL_ENDPOINTS", "")),
 		LogLevel:                strings.ToUpper(getEnv("LOG_LEVEL", "INFO")),
+		WebhookURL:              getEnv("WEBHOOK_URL", ""),
+		WebhookTemplate:         strings.ToLower(getEnv("WEBHOOK_TEMPLATE", "")),
+		WebhookEvents:           parseEndpoints(getEnv("WEBHOOK_EVENTS", "")),
+		WebhookTimeout:          getEnvAsDuration("WEBHOOK_TIMEOUT", 10*time.Second),
 	}
 
 	if len(cfg.HealthExternalEndpoints) == 0 {
 		cfg.HealthExternalEndpoints = defaultExternalEndpoints()
+	}
+
+	if len(cfg.WebhookEvents) == 0 {
+		cfg.WebhookEvents = defaultWebhookEvents()
+	} else {
+		// Validate webhook events against allowed set
+		validEvents := map[string]struct{}{
+			"circuit_renewed":  {},
+			"bootstrap_failed": {},
+			"health_changed":   {},
+		}
+		filteredEvents := make([]string, 0, len(cfg.WebhookEvents))
+		for _, evt := range cfg.WebhookEvents {
+			if _, ok := validEvents[evt]; ok {
+				filteredEvents = append(filteredEvents, evt)
+			} else {
+				slog.Warn("Invalid webhook event configured; ignoring",
+					"event", evt,
+					"valid_options", []string{"circuit_renewed", "bootstrap_failed", "health_changed"},
+				)
+			}
+		}
+		if len(filteredEvents) == 0 {
+			if len(cfg.WebhookEvents) > 0 {
+				slog.Warn("All configured webhook events were invalid; falling back to defaults",
+					"valid_options", []string{"circuit_renewed", "bootstrap_failed", "health_changed"},
+				)
+			}
+			cfg.WebhookEvents = defaultWebhookEvents()
+		} else {
+			cfg.WebhookEvents = filteredEvents
+		}
+	}
+
+	// Validate and set webhook template only when webhook URL is configured
+	if cfg.WebhookURL != "" {
+		if cfg.WebhookTemplate == "" {
+			cfg.WebhookTemplate = "discord" // Default to discord if not specified
+		}
+		validTemplates := []string{"discord", "slack", "gotify", "json"}
+		isValid := false
+		for _, valid := range validTemplates {
+			if cfg.WebhookTemplate == valid {
+				isValid = true
+				break
+			}
+		}
+		if !isValid {
+			slog.Warn("Invalid webhook template, defaulting to JSON",
+				"template", cfg.WebhookTemplate,
+				"valid_options", validTemplates,
+			)
+			cfg.WebhookTemplate = "json"
+		}
 	}
 
 	return cfg
@@ -60,6 +123,25 @@ func getEnvAsInt(key string, defaultValue int) int {
 	return value
 }
 
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	valueStr := strings.TrimSpace(os.Getenv(key))
+	if valueStr == "" {
+		return defaultValue
+	}
+
+	value, err := time.ParseDuration(valueStr)
+	if err != nil {
+		slog.Warn("Invalid duration configuration value",
+			"key", key,
+			"value", valueStr,
+			"default", defaultValue,
+			"error", err,
+		)
+		return defaultValue
+	}
+	return value
+}
+
 func parseEndpoints(raw string) []string {
 	if raw == "" {
 		return nil
@@ -79,5 +161,13 @@ func parseEndpoints(raw string) []string {
 func defaultExternalEndpoints() []string {
 	return []string{
 		"https://check.torproject.org/api/ip",
+	}
+}
+
+func defaultWebhookEvents() []string {
+	return []string{
+		"circuit_renewed",
+		"bootstrap_failed",
+		"health_changed",
 	}
 }

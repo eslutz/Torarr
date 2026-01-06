@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"testing"
+	"time"
 )
 
 func TestLoad_Defaults(t *testing.T) {
@@ -30,6 +31,25 @@ func TestLoad_Defaults(t *testing.T) {
 	if len(cfg.HealthExternalEndpoints) == 0 {
 		t.Error("expected default external endpoints to be set")
 	}
+
+	// Check webhook defaults
+	if cfg.WebhookURL != "" {
+		t.Errorf("expected WebhookURL to be empty, got '%s'", cfg.WebhookURL)
+	}
+
+	// In the default config (no WebhookURL set), WebhookTemplate should remain empty.
+	// A default template is only applied when a WebhookURL is configured.
+	if cfg.WebhookTemplate != "" {
+		t.Errorf("expected WebhookTemplate to be empty when WebhookURL not set, got '%s'", cfg.WebhookTemplate)
+	}
+
+	if len(cfg.WebhookEvents) == 0 {
+		t.Error("expected default webhook events to be set")
+	}
+
+	if cfg.WebhookTimeout != 10*time.Second {
+		t.Errorf("expected WebhookTimeout to be 10s, got %v", cfg.WebhookTimeout)
+	}
 }
 
 func TestLoad_CustomValues(t *testing.T) {
@@ -51,6 +71,18 @@ func TestLoad_CustomValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.Setenv("LOG_LEVEL", "debug"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("WEBHOOK_URL", "https://hooks.example.com/webhook"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("WEBHOOK_TEMPLATE", "slack"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("WEBHOOK_EVENTS", "circuit_renewed,bootstrap_failed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Setenv("WEBHOOK_TIMEOUT", "30s"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -80,6 +112,58 @@ func TestLoad_CustomValues(t *testing.T) {
 
 	if len(cfg.HealthExternalEndpoints) != 2 {
 		t.Errorf("expected 2 external endpoints, got %d", len(cfg.HealthExternalEndpoints))
+	}
+
+	// Check webhook custom values
+	if cfg.WebhookURL != "https://hooks.example.com/webhook" {
+		t.Errorf("expected WebhookURL to be 'https://hooks.example.com/webhook', got '%s'", cfg.WebhookURL)
+	}
+
+	if cfg.WebhookTemplate != "slack" {
+		t.Errorf("expected WebhookTemplate to be 'slack', got '%s'", cfg.WebhookTemplate)
+	}
+
+	if len(cfg.WebhookEvents) != 2 {
+		t.Errorf("expected 2 webhook events, got %d", len(cfg.WebhookEvents))
+	}
+
+	if cfg.WebhookTimeout != 30*time.Second {
+		t.Errorf("expected WebhookTimeout to be 30s, got %v", cfg.WebhookTimeout)
+	}
+}
+
+func TestGetEnvAsDuration_ValidValue(t *testing.T) {
+	clearEnv()
+	if err := os.Setenv("TEST_DURATION", "5m30s"); err != nil {
+		t.Fatal(err)
+	}
+	defer clearEnv()
+
+	result := getEnvAsDuration("TEST_DURATION", 10*time.Second)
+	expected := 5*time.Minute + 30*time.Second
+	if result != expected {
+		t.Errorf("expected duration %v, got %v", expected, result)
+	}
+}
+
+func TestGetEnvAsDuration_InvalidValue(t *testing.T) {
+	clearEnv()
+	if err := os.Setenv("TEST_DURATION", "not_a_duration"); err != nil {
+		t.Fatal(err)
+	}
+	defer clearEnv()
+
+	result := getEnvAsDuration("TEST_DURATION", 10*time.Second)
+	if result != 10*time.Second {
+		t.Errorf("expected default value 10s for invalid input, got %v", result)
+	}
+}
+
+func TestGetEnvAsDuration_EmptyValue(t *testing.T) {
+	clearEnv()
+	result := getEnvAsDuration("NONEXISTENT_DURATION", 15*time.Second)
+	if result != 15*time.Second {
+		t.Errorf("expected default value 15s for empty env var, got %v", result)
 	}
 }
 
@@ -143,6 +227,25 @@ func TestDefaultExternalEndpoints(t *testing.T) {
 	}
 }
 
+func TestDefaultWebhookEvents(t *testing.T) {
+	events := defaultWebhookEvents()
+	if len(events) == 0 {
+		t.Error("expected at least one default webhook event")
+	}
+
+	// Verify it contains the circuit_renewed event
+	found := false
+	for _, ev := range events {
+		if ev == "circuit_renewed" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("expected default webhook events to include circuit_renewed")
+	}
+}
+
 func clearEnv() {
 	_ = os.Unsetenv("TOR_CONTROL_ADDRESS")
 	_ = os.Unsetenv("TOR_CONTROL_PASSWORD")
@@ -150,5 +253,10 @@ func clearEnv() {
 	_ = os.Unsetenv("HEALTH_EXTERNAL_TIMEOUT")
 	_ = os.Unsetenv("HEALTH_EXTERNAL_ENDPOINTS")
 	_ = os.Unsetenv("LOG_LEVEL")
+	_ = os.Unsetenv("WEBHOOK_URL")
+	_ = os.Unsetenv("WEBHOOK_TEMPLATE")
+	_ = os.Unsetenv("WEBHOOK_EVENTS")
+	_ = os.Unsetenv("WEBHOOK_TIMEOUT")
 	_ = os.Unsetenv("TEST_INT")
+	_ = os.Unsetenv("TEST_DURATION")
 }

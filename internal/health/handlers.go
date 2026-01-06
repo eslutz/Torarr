@@ -1,12 +1,16 @@
 package health
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"slices"
+	"sync"
 	"time"
 
 	"github.com/eslutz/torarr/internal/config"
+	"github.com/eslutz/torarr/internal/notify"
 	"github.com/eslutz/torarr/internal/tor"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -16,6 +20,10 @@ type Handler struct {
 	readinessChecker *ExternalChecker
 	config           *config.Config
 	metrics          *metrics
+	webhook          *notify.Webhook
+	webhookEvents    []string
+	previousHealthy  *bool      // Tracks previous health state for change detection
+	healthMu         sync.Mutex // Protects previousHealthy from concurrent access
 }
 
 func NewHandler(cfg *config.Config) *Handler {
@@ -28,11 +36,20 @@ func NewHandler(cfg *config.Config) *Handler {
 		"socks5://127.0.0.1:9050",
 	)
 
+	// Initialize webhook if URL is configured
+	var webhook *notify.Webhook
+	if cfg.WebhookURL != "" {
+		template := notify.Template(cfg.WebhookTemplate)
+		webhook = notify.NewWebhook(cfg.WebhookURL, template)
+	}
+
 	return &Handler{
 		torClient:        torClient,
 		readinessChecker: readinessChecker,
 		config:           cfg,
 		metrics:          metrics,
+		webhook:          webhook,
+		webhookEvents:    cfg.WebhookEvents,
 	}
 }
 
@@ -54,6 +71,18 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		if h.metrics != nil {
 			h.metrics.torReady.Set(0)
 		}
+
+		// Check for health state change first to avoid duplicate notifications
+		stateChanged := h.checkHealthStateChange(false)
+
+		// Send EventBootstrapFailed webhook only if state didn't change
+		// (EventHealthChanged already sent if state changed)
+		if !stateChanged {
+			h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap failed", notify.Details{
+				Error: err.Error(),
+			})
+		}
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "NOT_READY",
@@ -68,6 +97,19 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		if h.metrics != nil {
 			h.metrics.observeTorStatus(status)
 		}
+
+		// Check for health state change first to avoid duplicate notifications
+		stateChanged := h.checkHealthStateChange(false)
+
+		// Send EventBootstrapFailed webhook only if state didn't change
+		// (EventHealthChanged already sent if state changed)
+		if !stateChanged {
+			h.sendWebhook(notify.EventBootstrapFailed, "Tor bootstrap incomplete", notify.Details{
+				Bootstrap: &status.BootstrapPhase,
+				Circuits:  status.NumCircuits,
+			})
+		}
+
 		w.WriteHeader(http.StatusServiceUnavailable)
 		if err := json.NewEncoder(w).Encode(map[string]interface{}{
 			"status": "NOT_READY",
@@ -81,6 +123,9 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	if h.metrics != nil {
 		h.metrics.observeTorStatus(status)
 	}
+
+	// Check for health state change to healthy
+	h.checkHealthStateChange(true)
 
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{
@@ -163,6 +208,20 @@ func (h *Handler) Renew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build details for webhook notification using current Tor status, if available
+	if status, err := h.torClient.GetStatus(); err != nil {
+		// If we can't retrieve status, skip sending a potentially misleading webhook
+		slog.Warn("Failed to get Tor status after NEWNYM; skipping circuit renewal webhook", "error", err)
+	} else {
+		details := notify.Details{
+			Circuits: status.NumCircuits,
+			Healthy:  status.CircuitEstablished,
+		}
+
+		// Send webhook notification if configured
+		h.sendWebhook(notify.EventCircuitRenewed, "Tor circuit renewal requested", details)
+	}
+
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "OK", "message": "Signal NEWNYM sent"}); err != nil {
 		slog.Error("Failed to encode renew response", "error", err)
@@ -210,4 +269,93 @@ type statusRecorder struct {
 func (r *statusRecorder) WriteHeader(statusCode int) {
 	r.status = statusCode
 	r.ResponseWriter.WriteHeader(statusCode)
+}
+
+// sendWebhook sends a webhook notification if enabled and the event is configured
+func (h *Handler) sendWebhook(event notify.Event, message string, details notify.Details) {
+	if h.webhook == nil {
+		return
+	}
+
+	// Check if this event is enabled in configuration
+	if !slices.Contains(h.webhookEvents, string(event)) {
+		return
+	}
+
+	payload := notify.Payload{
+		Event:   event,
+		Message: message,
+		Details: details,
+	}
+
+	// Send webhook in background with timeout
+	go func() {
+		// Recover from panics to prevent crashing the application
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("Webhook goroutine panicked",
+					"event", event,
+					"panic", r,
+				)
+			}
+		}()
+
+		ctx, cancel := context.WithTimeout(context.Background(), h.config.WebhookTimeout)
+		defer cancel()
+
+		start := time.Now()
+		err := h.webhook.Send(ctx, payload)
+		duration := time.Since(start)
+
+		success := err == nil
+		if h.metrics != nil {
+			h.metrics.observeWebhook(string(event), success, duration)
+		}
+
+		if err != nil {
+			slog.Error("Webhook notification failed",
+				"event", event,
+				"error", err,
+				"duration", duration,
+			)
+		} else {
+			slog.Debug("Webhook notification sent",
+				"event", event,
+				"duration", duration,
+			)
+		}
+	}()
+}
+
+// checkHealthStateChange detects health state transitions and sends EventHealthChanged webhook
+// Returns true if the state changed, false otherwise
+func (h *Handler) checkHealthStateChange(currentlyHealthy bool) bool {
+	h.healthMu.Lock()
+	defer h.healthMu.Unlock()
+
+	if h.previousHealthy == nil {
+		// First call - initialize state
+		h.previousHealthy = &currentlyHealthy
+		return false
+	}
+
+	// Check if state has changed
+	if *h.previousHealthy != currentlyHealthy {
+		var message string
+		if currentlyHealthy {
+			message = "Tor health status changed to healthy"
+		} else {
+			message = "Tor health status changed to unhealthy"
+		}
+
+		h.sendWebhook(notify.EventHealthChanged, message, notify.Details{
+			Healthy: currentlyHealthy,
+		})
+
+		// Update previous state
+		*h.previousHealthy = currentlyHealthy
+		return true
+	}
+
+	return false
 }

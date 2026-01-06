@@ -19,6 +19,9 @@ type metrics struct {
 	torBytesRead     prometheus.Gauge
 	torBytesWritten  prometheus.Gauge
 	externalAttempts *prometheus.CounterVec
+
+	webhookRequests *prometheus.CounterVec
+	webhookDuration *prometheus.HistogramVec
 }
 
 func newMetrics() *metrics {
@@ -56,6 +59,15 @@ func newMetrics() *metrics {
 			Name: "torarr_external_check_total",
 			Help: "External check attempts with result labels.",
 		}, []string{"endpoint", "success", "is_tor"}),
+		webhookRequests: promauto.NewCounterVec(prometheus.CounterOpts{
+			Name: "torarr_webhook_requests_total",
+			Help: "Total webhook notification attempts.",
+		}, []string{"event", "status"}),
+		webhookDuration: promauto.NewHistogramVec(prometheus.HistogramOpts{
+			Name:    "torarr_webhook_duration_seconds",
+			Help:    "Webhook notification duration.",
+			Buckets: prometheus.DefBuckets,
+		}, []string{"event"}),
 	}
 }
 
@@ -80,4 +92,13 @@ func (m *metrics) observeTorStatus(status *tor.Status) {
 
 func (m *metrics) observeExternalCheck(endpoint string, success, isTor bool) {
 	m.externalAttempts.WithLabelValues(endpoint, strconv.FormatBool(success), strconv.FormatBool(isTor)).Inc()
+}
+
+func (m *metrics) observeWebhook(event string, success bool, duration time.Duration) {
+	status := "success"
+	if !success {
+		status = "failed"
+	}
+	m.webhookRequests.WithLabelValues(event, status).Inc()
+	m.webhookDuration.WithLabelValues(event).Observe(duration.Seconds())
 }
