@@ -53,16 +53,14 @@ const (
 type Webhook struct {
 	url      string
 	template Template
-	timeout  time.Duration
 	client   *http.Client
 }
 
 // NewWebhook creates a new webhook notifier
-func NewWebhook(url string, template Template, timeout time.Duration) *Webhook {
+func NewWebhook(url string, template Template) *Webhook {
 	return &Webhook{
 		url:      url,
 		template: template,
-		timeout:  timeout,
 		client:   &http.Client{},
 	}
 }

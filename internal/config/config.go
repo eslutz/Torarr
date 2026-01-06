@@ -85,7 +85,7 @@ func Load() *Config {
 			}
 		}
 		if !isValid {
-			slog.Error("Invalid webhook template, defaulting to JSON",
+			slog.Warn("Invalid webhook template, defaulting to JSON",
 				"template", cfg.WebhookTemplate,
 				"valid_options", validTemplates,
 			)

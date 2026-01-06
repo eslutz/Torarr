@@ -13,9 +13,8 @@ import (
 func TestNewWebhook(t *testing.T) {
 	url := "https://example.com/webhook"
 	template := TemplateDiscord
-	timeout := 10 * time.Second
 
-	webhook := NewWebhook(url, template, timeout)
+	webhook := NewWebhook(url, template)
 
 	if webhook.url != url {
 		t.Errorf("Expected url %s, got %s", url, webhook.url)
@@ -23,16 +22,13 @@ func TestNewWebhook(t *testing.T) {
 	if webhook.template != template {
 		t.Errorf("Expected template %s, got %s", template, webhook.template)
 	}
-	if webhook.timeout != timeout {
-		t.Errorf("Expected timeout %v, got %v", timeout, webhook.timeout)
-	}
 	if webhook.client == nil {
 		t.Error("Expected client to be initialized")
 	}
 }
 
 func TestWebhook_Send_NoURL(t *testing.T) {
-	webhook := NewWebhook("", TemplateJSON, 10*time.Second)
+	webhook := NewWebhook("", TemplateJSON)
 
 	payload := Payload{
 		Event:   EventCircuitRenewed,
@@ -75,7 +71,7 @@ func TestWebhook_Send_Success(t *testing.T) {
 			}))
 			defer server.Close()
 
-			webhook := NewWebhook(server.URL, tt.template, 10*time.Second)
+			webhook := NewWebhook(server.URL, tt.template)
 
 			bootstrap := 100
 			payload := Payload{
@@ -102,7 +98,7 @@ func TestWebhook_Send_HTTPError(t *testing.T) {
 	}))
 	defer server.Close()
 
-	webhook := NewWebhook(server.URL, TemplateJSON, 10*time.Second)
+	webhook := NewWebhook(server.URL, TemplateJSON)
 
 	payload := Payload{
 		Event:   EventCircuitRenewed,
@@ -122,7 +118,7 @@ func TestWebhook_Send_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	webhook := NewWebhook(server.URL, TemplateJSON, 50*time.Millisecond)
+	webhook := NewWebhook(server.URL, TemplateJSON)
 
 	payload := Payload{
 		Event:   EventCircuitRenewed,
@@ -140,7 +136,7 @@ func TestWebhook_Send_Timeout(t *testing.T) {
 }
 
 func TestWebhook_FormatDiscord(t *testing.T) {
-	webhook := NewWebhook("https://example.com", TemplateDiscord, 10*time.Second)
+	webhook := NewWebhook("https://example.com", TemplateDiscord)
 
 	bootstrap := 100
 	payload := Payload{
@@ -190,7 +186,7 @@ func TestWebhook_FormatDiscord(t *testing.T) {
 }
 
 func TestWebhook_FormatSlack(t *testing.T) {
-	webhook := NewWebhook("https://example.com", TemplateSlack, 10*time.Second)
+	webhook := NewWebhook("https://example.com", TemplateSlack)
 
 	bootstrap := 75
 	payload := Payload{
@@ -232,7 +228,7 @@ func TestWebhook_FormatSlack(t *testing.T) {
 }
 
 func TestWebhook_FormatGotify(t *testing.T) {
-	webhook := NewWebhook("https://example.com", TemplateGotify, 10*time.Second)
+	webhook := NewWebhook("https://example.com", TemplateGotify)
 
 	payload := Payload{
 		Event:   EventHealthChanged,
@@ -271,7 +267,7 @@ func TestWebhook_FormatGotify(t *testing.T) {
 }
 
 func TestWebhook_FormatJSON(t *testing.T) {
-	webhook := NewWebhook("https://example.com", TemplateJSON, 10*time.Second)
+	webhook := NewWebhook("https://example.com", TemplateJSON)
 
 	bootstrap := 100
 	payload := Payload{
@@ -318,7 +314,7 @@ func TestWebhook_FormatJSON(t *testing.T) {
 }
 
 func TestWebhook_GetColor(t *testing.T) {
-	webhook := NewWebhook("", TemplateDiscord, 10*time.Second)
+	webhook := NewWebhook("", TemplateDiscord)
 
 	tests := []struct {
 		event Event
@@ -341,7 +337,7 @@ func TestWebhook_GetColor(t *testing.T) {
 }
 
 func TestWebhook_GetColorHex(t *testing.T) {
-	webhook := NewWebhook("", TemplateSlack, 10*time.Second)
+	webhook := NewWebhook("", TemplateSlack)
 
 	tests := []struct {
 		event Event
@@ -364,7 +360,7 @@ func TestWebhook_GetColorHex(t *testing.T) {
 }
 
 func TestWebhook_GetPriority(t *testing.T) {
-	webhook := NewWebhook("", TemplateGotify, 10*time.Second)
+	webhook := NewWebhook("", TemplateGotify)
 
 	tests := []struct {
 		event Event
@@ -387,7 +383,7 @@ func TestWebhook_GetPriority(t *testing.T) {
 }
 
 func TestWebhook_BuildFields(t *testing.T) {
-	webhook := NewWebhook("", TemplateDiscord, 10*time.Second)
+	webhook := NewWebhook("", TemplateDiscord)
 
 	bootstrap100 := 100
 	bootstrap75 := 75
@@ -429,7 +425,7 @@ func TestWebhook_BuildFields(t *testing.T) {
 }
 
 func TestWebhook_BuildSlackFields(t *testing.T) {
-	webhook := NewWebhook("", TemplateSlack, 10*time.Second)
+	webhook := NewWebhook("", TemplateSlack)
 
 	bootstrap := 100
 	details := Details{
@@ -456,7 +452,7 @@ func TestWebhook_BuildSlackFields(t *testing.T) {
 }
 
 func TestWebhook_FormatPayload_UnknownTemplate(t *testing.T) {
-	webhook := NewWebhook("https://example.com", Template("unknown"), 10*time.Second)
+	webhook := NewWebhook("https://example.com", Template("unknown"))
 
 	payload := Payload{
 		Event:   EventCircuitRenewed,
@@ -486,7 +482,7 @@ func TestWebhook_Send_ContextCanceled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	webhook := NewWebhook(server.URL, TemplateJSON, 10*time.Second)
+	webhook := NewWebhook(server.URL, TemplateJSON)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel() // Cancel immediately

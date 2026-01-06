@@ -40,7 +40,7 @@ func NewHandler(cfg *config.Config) *Handler {
 	var webhook *notify.Webhook
 	if cfg.WebhookURL != "" {
 		template := notify.Template(cfg.WebhookTemplate)
-		webhook = notify.NewWebhook(cfg.WebhookURL, template, cfg.WebhookTimeout)
+		webhook = notify.NewWebhook(cfg.WebhookURL, template)
 	}
 
 	return &Handler{
