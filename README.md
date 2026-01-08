@@ -196,44 +196,96 @@ Releases are driven by the `VERSION` file:
 
 To cut a new release: update `VERSION` and merge to `main`.
 
-## Building from Source
+## Contributing
+
+Contributions are welcome! Please follow these guidelines when submitting changes.
+
+### Building from Source
 
 ```bash
+# Clone the repository
 git clone https://github.com/eslutz/torarr.git
 cd torarr
+
+# Install dependencies
+go mod download
 
 # Build binary
 go build -o healthserver ./cmd/healthserver
 
 # Build Docker image
-docker build -t torarr:local .
+docker build -t torarr .
 ```
 
-## Contributing
+### Development
+
+```bash
+# Run tests
+go test ./...
+
+# Run tests with race detector and coverage
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+
+# View coverage report
+go tool cover -func=coverage.out
+
+# Run linter
+golangci-lint run
+
+# Run locally (requires Tor installation)
+export HEALTH_PORT=8085
+export TOR_CONTROL_ADDRESS=127.0.0.1:9051
+go run ./cmd/healthserver
+```
+
+Before submitting a pull request:
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Run tests and lint
-5. Submit a pull request
+4. Add tests if applicable
+5. Run linters and tests
+6. Submit a pull request
+
+See our [Pull Request Template](.github/PULL_REQUEST_TEMPLATE.md) for more details.
 
 ## Security
 
-- Don't expose the SOCKS proxy publicly; bind it to localhost or a private network.
-- The Tor control password is generated at startup if unset; treat container logs as sensitive if you rely on auto-generation.
+Security is a top priority for this project. If you discover a security vulnerability, please follow responsible disclosure practices.
 
-Report vulnerabilities via GitHub Security Advisories:
-<https://github.com/eslutz/torarr/security/advisories/new>
+**Reporting Vulnerabilities:**
+
+Please report security vulnerabilities through GitHub Security Advisories:
+https://github.com/eslutz/torarr/security/advisories/new
+
+Alternatively, you can view our [Security Policy](.github/SECURITY.md) for additional contact methods and guidelines.
+
+**Security Best Practices:**
+
+- Keep your installation up to date with the latest releases
+- Never expose the SOCKS proxy port publicly; bind to localhost or private networks only
+- Treat container logs as sensitive if using auto-generated control passwords
+- Use strong, unique control passwords in production environments
+- Regularly monitor logs for suspicious activity
+- Consider using exit node restrictions for additional privacy
 
 ## License
 
-This project is licensed under the MIT License - see [LICENSE](LICENSE).
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+You are free to use, modify, and distribute this software under the terms of the MIT License.
 
 ## Acknowledgments
 
-- [Tor Project](https://www.torproject.org/) - Anonymous communication network
-- [Prometheus](https://prometheus.io/) - Monitoring system and time series database
+This project is built with and inspired by excellent open-source software:
+
+- **[Tor Project](https://www.torproject.org/)** - Anonymous communication network
+- **[Prometheus](https://prometheus.io/)** - Monitoring system and time series database
+- **[fsnotify](https://github.com/fsnotify/fsnotify)** - Cross-platform file system notifications for Go
+
+Special thanks to the open-source community for their contributions and support.
 
 ## Related Projects
 
-- [Forwardarr](https://github.com/eslutz/forwardarr) - SPort update container for Gluetun to qBittorrent port syncing that updates the listening port on change
+- **[Forwardarr](https://github.com/eslutz/forwardarr)** - Automatic port forwarding sync from Gluetun VPN to qBittorrent
+- **[Unpackarr](https://github.com/eslutz/unpackarr)** - Container-native archive extraction service for Sonarr, Radarr, and more
