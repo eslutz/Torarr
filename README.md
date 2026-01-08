@@ -39,22 +39,39 @@ docker run -d \
 
 ## Configuration
 
-All application configuration is done via environment variables. Use the table below to set values in your deployment or compose file. A sample file is available at [docs/.env.example](docs/.env.example).
+All application configuration is done via environment variables. Below is a quick reference of key settings. For a complete configuration template with all options, see [docs/.env.example](docs/.env.example).
+
+### General Settings
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `TZ` | `UTC` | Container timezone |
 | `LOG_LEVEL` | `INFO` | Logging level (DEBUG, INFO, WARN, ERROR) |
+
+### Health Server Settings
+
+| Variable | Default | Description |
+| --- | --- | --- |
 | `HEALTH_PORT` | `8085` | HTTP server port for health/metrics |
 | `HEALTH_EXTERNAL_TIMEOUT` | `15` | Timeout (seconds) for external Tor egress checks |
-| `HEALTH_EXTERNAL_ENDPOINTS` | `https://check.torproject.org/api/ip` | Comma-separated URLs for external Tor egress verification |
-| `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address for the health server |
-| `TOR_CONTROL_PASSWORD` | *(auto-generated)* | Tor control password used by the health server; generated at startup if unset |
-| `TOR_EXIT_NODES` | *(none)* | Optional exit node selector (e.g. `{us},{ca}`) |
-| `WEBHOOK_URL` | *(none)* | Webhook endpoint URL for notifications (e.g., Discord, Slack) |
-| `WEBHOOK_TEMPLATE` | `discord` | Webhook template format: `discord`, `slack`, `gotify`, or `json` |
-| `WEBHOOK_EVENTS` | `circuit_renewed,bootstrap_failed,health_changed` | Comma-separated events to notify: `circuit_renewed`, `bootstrap_failed`, `health_changed` |
-| `WEBHOOK_TIMEOUT` | `10s` | Timeout for webhook requests (supports Go duration format) |
+
+### Tor Configuration
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `TOR_CONTROL_ADDRESS` | `127.0.0.1:9051` | Tor control port address |
+| `TOR_CONTROL_PASSWORD` | *(auto-generated)* | Tor control password; auto-generated if unset |
+| `TOR_EXIT_NODES` | *(none)* | Exit node selector (e.g. `{us},{ca}`) |
+
+### Webhook Notifications
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `WEBHOOK_URL` | *(none)* | Webhook endpoint URL (Discord, Slack, etc.) |
+| `WEBHOOK_TEMPLATE` | `discord` | Webhook format: `discord`, `slack`, `gotify`, `json` |
+| `WEBHOOK_EVENTS` | `circuit_renewed,bootstrap_failed,health_changed` | Events to notify on (comma-separated) |
+
+> **📝 Full Configuration:** See [docs/.env.example](docs/.env.example) for all available options with detailed comments and examples.
 
 ## Architecture
 
