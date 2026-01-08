@@ -50,12 +50,12 @@ RUN chmod +x /entrypoint.sh
 
 # Set default environment variables
 ENV TZ=UTC \
-  HEALTH_PORT=8085 \
+  HEALTH_PORT=9091 \
   HEALTH_EXTERNAL_TIMEOUT=15 \
   LOG_LEVEL=INFO
 
 # Expose ports
-EXPOSE 9050 8085
+EXPOSE 9050 9091
 
 # Set working directory
 WORKDIR /var/lib/tor
@@ -65,7 +65,7 @@ USER tor
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
-  CMD wget -qO- --timeout=5 http://localhost:8085/health || exit 1
+  CMD wget -qO- --timeout=5 http://localhost:9091/health || exit 1
 
 # Run entrypoint
 ENTRYPOINT ["/entrypoint.sh"]

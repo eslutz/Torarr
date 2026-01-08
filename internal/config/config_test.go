@@ -16,8 +16,8 @@ func TestLoad_Defaults(t *testing.T) {
 		t.Errorf("expected TorControlAddress to be '127.0.0.1:9051', got '%s'", cfg.TorControlAddress)
 	}
 
-	if cfg.HealthPort != "8085" {
-		t.Errorf("expected HealthPort to be '8085', got '%s'", cfg.HealthPort)
+	if cfg.HealthPort != "9091" {
+		t.Errorf("expected HealthPort to be '9091', got '%s'", cfg.HealthPort)
 	}
 
 	if cfg.HealthExternalTimeout != 15 {

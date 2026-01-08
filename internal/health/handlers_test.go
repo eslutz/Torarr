@@ -162,7 +162,7 @@ func TestNewHandler(t *testing.T) {
 	cfg := &config.Config{
 		TorControlAddress:       "127.0.0.1:9051",
 		TorControlPassword:      "test",
-		HealthPort:              "8085",
+		HealthPort:              "9091",
 		HealthExternalEndpoints: []string{"https://check.torproject.org/"},
 		HealthExternalTimeout:   10,
 	}

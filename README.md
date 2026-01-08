@@ -30,7 +30,7 @@ See [docs/docker-compose.example.yml](docs/docker-compose.example.yml).
 docker run -d \
   --name torarr \
   -p 127.0.0.1:9050:9050 \
-  -p 127.0.0.1:8085:8085 \
+  -p 127.0.0.1:9091:9091 \
   -e TZ=America/New_York \
   -v tor-data:/var/lib/tor \
   --restart unless-stopped \
@@ -52,7 +52,7 @@ All application configuration is done via environment variables. Below is a quic
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `HEALTH_PORT` | `8085` | HTTP server port for health/metrics |
+| `HEALTH_PORT` | `9091` | HTTP server port for health/metrics |
 | `HEALTH_EXTERNAL_TIMEOUT` | `15` | Timeout (seconds) for external Tor egress checks |
 
 ### Tor Configuration
@@ -81,7 +81,7 @@ All application configuration is done via environment variables. Below is a quic
 ├────────────────────────────────────────────────────────────┤
 │  ┌──────────────┐      control port      ┌───────────────┐ │
 │  │     Tor      │◄──────────────────────►│  Healthserver │ │
-│  │ SOCKS :9050  │        :9051           │  HTTP :8085   │ │
+│  │ SOCKS :9050  │        :9051           │  HTTP :9091   │ │
 │  └──────┬───────┘                        └───────────────┘ │
 │         │                                                  │
 │         ▼                                                  │
@@ -172,7 +172,7 @@ Torarr can send webhook notifications for various events. Configure webhooks usi
 docker run -d \
   --name torarr \
   -p 127.0.0.1:9050:9050 \
-  -p 127.0.0.1:8085:8085 \
+  -p 127.0.0.1:9091:9091 \
   -e WEBHOOK_URL=https://discord.com/api/webhooks/YOUR_WEBHOOK_ID \
   -e WEBHOOK_TEMPLATE=discord \
   -e WEBHOOK_EVENTS=circuit_renewed,bootstrap_failed \

@@ -8,16 +8,16 @@ services:
     environment:
       - TZ=${TZ:-America/New_York}
       - TOR_CONTROL_PASSWORD=${TOR_CONTROL_PASSWORD:-}
-      - HEALTH_PORT=8085
+      - HEALTH_PORT=9091
       - LOG_LEVEL=INFO
     ports:
       - "127.0.0.1:9050:9050" # SOCKS5 proxy
-      - "127.0.0.1:8085:8085" # Health endpoint (optional)
+      - "127.0.0.1:9091:9091" # Health endpoint (optional)
     volumes:
       - tor-data:/var/lib/tor # Consensus cache for fast restarts
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:8085/health"]
+      test: ["CMD", "wget", "-qO-", "--timeout=5", "http://localhost:9091/health"]
       interval: 30s
       timeout: 10s
       retries: 3

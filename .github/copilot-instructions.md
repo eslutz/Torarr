@@ -5,7 +5,7 @@
 Torarr is a production-ready Tor SOCKS proxy container with a Go health/metrics sidecar designed for the \*arr stack (Sonarr, Radarr, Prowlarr). The architecture consists of two processes running in a single container:
 
 1. **Tor daemon** - Main process providing SOCKS5 proxy on port 9050
-2. **Health server** (Go) - HTTP sidecar on port 8085 providing health checks, circuit renewal, and Prometheus metrics
+2. **Health server** (Go) - HTTP sidecar on port 9091 providing health checks, circuit renewal, and Prometheus metrics
 
 **Key Design Philosophy**: The entrypoint script generates/hashes the Tor control password, configures torrc dynamically, then starts the health server in background and Tor as the main process.
 
@@ -14,7 +14,7 @@ Torarr is a production-ready Tor SOCKS proxy container with a Go health/metrics 
 ```
 User Request → Tor (SOCKS :9050) → Internet
                  ↕ control port :9051
-          Health Server (HTTP :8085) ← Health Checks / Metrics Scraping
+          Health Server (HTTP :9091) ← Health Checks / Metrics Scraping
 ```
 
 - **Health server communicates with Tor** via control port protocol (see `internal/tor/control.go`)

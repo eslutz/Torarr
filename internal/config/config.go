@@ -25,7 +25,7 @@ func Load() *Config {
 	cfg := &Config{
 		TorControlAddress:       getEnv("TOR_CONTROL_ADDRESS", "127.0.0.1:9051"),
 		TorControlPassword:      os.Getenv("TOR_CONTROL_PASSWORD"),
-		HealthPort:              getEnv("HEALTH_PORT", "8085"),
+		HealthPort:              getEnv("HEALTH_PORT", "9091"),
 		HealthExternalTimeout:   getEnvAsInt("HEALTH_EXTERNAL_TIMEOUT", 15),
 		HealthExternalEndpoints: parseEndpoints(getEnv("HEALTH_EXTERNAL_ENDPOINTS", "")),
 		LogLevel:                strings.ToUpper(getEnv("LOG_LEVEL", "INFO")),
