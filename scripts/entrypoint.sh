@@ -3,11 +3,13 @@ set -e
 
 echo "Starting Torarr..."
 
-# Generate Tor control password if not set
+# Generate Tor control password if not set. The value is deliberately not
+# logged: container logs are routinely shipped to log stores, and the control
+# port can drive Tor. Set TOR_CONTROL_PASSWORD yourself if you need to know it.
 if [ -z "$TOR_CONTROL_PASSWORD" ]; then
-    TOR_CONTROL_PASSWORD="torarr$(date +%s | sha256sum | base64 | head -c 16)"
+    TOR_CONTROL_PASSWORD="torarr$(head -c 32 /dev/urandom | base64 | tr -dc 'A-Za-z0-9' | head -c 24)"
     export TOR_CONTROL_PASSWORD
-    echo "Generated Tor control password: $TOR_CONTROL_PASSWORD"
+    echo "Generated a random Tor control password (set TOR_CONTROL_PASSWORD to choose your own)"
 fi
 
 # Update torrc with hashed password
@@ -23,10 +25,17 @@ if [ -n "$TOR_EXIT_NODES" ]; then
     echo "Configured ExitNodes: $TOR_EXIT_NODES"
 fi
 
-# Start health server in background
+# Start health server in background, and refuse to continue if it did not
+# start: a container with Tor up but no health server would look alive while
+# every probe failed, which is exactly how a wrong-architecture binary hid.
 echo "Starting health server..."
 /usr/local/bin/healthserver &
 HEALTH_PID=$!
+sleep 1
+if ! kill -0 "$HEALTH_PID" 2>/dev/null; then
+    echo "Health server failed to start (is /usr/local/bin/healthserver built for this architecture?)" >&2
+    exit 1
+fi
 
 # Trap signals for graceful shutdown
 trap 'echo "Shutting down..."; kill -TERM $HEALTH_PID 2>/dev/null || true; exit 0' TERM INT
