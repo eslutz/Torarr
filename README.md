@@ -264,7 +264,7 @@ Alternatively, you can view our [Security Policy](.github/SECURITY.md) for addit
 
 - Keep your installation up to date with the latest releases
 - Never expose the SOCKS proxy port publicly; bind to localhost or private networks only
-- Treat container logs as sensitive if using auto-generated control passwords
+- The auto-generated control password is never written to the container log; set `TOR_CONTROL_PASSWORD` yourself if you need to know it
 - Use strong, unique control passwords in production environments
 - Regularly monitor logs for suspicious activity
 - Consider using exit node restrictions for additional privacy
