@@ -286,6 +286,3 @@ This project is built with and inspired by excellent open-source software:
 Special thanks to the open-source community for their contributions and support.
 
 ## Related Projects
-
-- **[Forwardarr](https://github.com/eslutz/forwardarr)** - Automatic port forwarding sync from Gluetun VPN to qBittorrent
-- **[Unpackarr](https://github.com/eslutz/unpackarr)** - Container-native archive extraction service for Sonarr, Radarr, and more
